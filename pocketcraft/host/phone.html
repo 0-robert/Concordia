@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Pocketcraft — control your bot</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body data-mode="phone">
+    <header class="phone-header">
+      <div>
+        <span class="bot-pill" id="bot-pill">…</span>
+        <span id="status" class="status">connecting…</span>
+      </div>
+    </header>
+
+    <section class="chat-pane">
+      <form id="chat-form" class="chat-form">
+        <input
+          id="chat-input"
+          type="text"
+          placeholder="What should your bot do?"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="send"
+        />
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <main class="phone-main">
+      <div class="card">
+        <div class="label">GOAL</div>
+        <div id="goal" class="goal-text">awaiting your command…</div>
+      </div>
+
+      <div class="card flex-grow">
+        <div class="label">CLAUDE THINKING + ACTIONS</div>
+        <div id="log" class="log"></div>
+      </div>
+    </main>
+
+    <script type="module" src="/src/phone.js"></script>
+  </body>
+</html>

@@ -8,13 +8,18 @@
   </head>
   <body>
     <header>
-      <h1>Pocketcraft <span class="tag">AI in the Box</span></h1>
+      <h1>
+        Pocketcraft
+        <span class="tag">AI in the Box</span>
+        <span id="bot-tag" class="bot-tag">controlling: <b id="bot-tag-name">Alice</b></span>
+      </h1>
       <div id="status" class="status">connecting…</div>
     </header>
 
     <main>
       <section class="viewer-pane">
-        <iframe id="viewer" title="bot POV" src="http://localhost:3007"></iframe>
+        <iframe id="viewer" title="bot POV" credentialless allow="cross-origin-isolated"></iframe>
+        <div id="pod-terminal" class="pod-terminal"></div>
       </section>
 
       <aside class="agent-pane">

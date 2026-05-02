@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pocketcraft — main screen</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body data-mode="main">
+    <header>
+      <h1>
+        Pocketcraft
+        <span class="tag">AI in the Box</span>
+        <span id="status" class="status">connecting…</span>
+      </h1>
+      <div id="join-info" class="join-info">
+        <div class="join-text">
+          <div class="join-cta">📱 Scan to control a bot</div>
+          <div class="join-url" id="join-url">…</div>
+        </div>
+        <canvas id="qr" width="180" height="180"></canvas>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="overview-pane">
+        <div class="overview-header">
+          <span class="overview-label">OVERVIEW · drag to look around</span>
+        </div>
+        <iframe
+          id="overview"
+          title="overview (orbit)"
+          credentialless
+          allow="cross-origin-isolated"
+        ></iframe>
+      </section>
+      <section class="bots-grid" id="main-grid">
+        <!-- bot tiles get inserted here -->
+      </section>
+    </main>
+
+    <script type="module" src="/src/main-screen.js"></script>
+  </body>
+</html>

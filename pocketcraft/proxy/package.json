@@ -1,0 +1,13 @@
+{
+  "name": "pocketcraft-proxy",
+  "version": "0.0.1",
+  "description": "Tiny Anthropic proxy — keeps the API key server-side so the host page can call Claude without leaking it.",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --env-file=.env index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.35.0"
+  }
+}

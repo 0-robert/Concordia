@@ -52,6 +52,18 @@ h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+.bot-tag {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-left: 12px;
+}
+.bot-tag b {
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+body[data-bot="Bob"] .bot-tag b { color: #60a5fa; /* blue for Bob */ }
+body[data-bot="Alice"] .bot-tag b { color: #4ade80; /* green for Alice */ }
 .status {
   margin-left: auto;
   font-size: 12px;
@@ -67,18 +79,31 @@ main {
   min-height: 0;
 }
 
-/* Left: viewer */
+/* Left: viewer + pod terminal stacked */
 .viewer-pane {
   background: #000;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .viewer-pane iframe {
   border: none;
   width: 100%;
-  height: 100%;
+  flex: 1 1 60%;
+  min-height: 0;
   display: block;
 }
+.pod-terminal {
+  flex: 0 0 200px;
+  height: 200px;
+  background: #000;
+  border-top: 1px solid var(--border);
+}
+/* In local mode there's no pod → hide the terminal; let viewer take full height */
+body[data-mode="local"] .pod-terminal { display: none; }
+body[data-mode="local"] .viewer-pane iframe { flex: 1 1 100%; }
 
 /* Right: agent panel */
 .agent-pane {
@@ -164,22 +189,299 @@ main {
   border: 1px solid var(--border);
 }
 .log-entry {
-  padding: 3px 0;
+  padding: 4px 0;
   border-bottom: 1px dashed var(--border);
+  word-break: break-word;
 }
 .log-entry:last-child { border-bottom: none; }
 .log-entry .tool { color: var(--accent); font-weight: 600; }
 .log-entry .ok { color: var(--accent-go); }
 .log-entry .err { color: var(--accent-warn); }
 .log-entry .args { color: var(--text-dim); }
-.log-entry.user { color: var(--accent-warm); }
+.log-entry.user {
+  color: var(--accent-warm);
+  padding: 6px 8px;
+  background: rgba(251, 191, 36, 0.08);
+  border-radius: 4px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  margin: 4px 0;
+}
 .log-entry.user .speaker { font-weight: 700; }
+.log-entry.claude-think {
+  color: var(--text);
+  background: rgba(94, 234, 212, 0.06);
+  border-left: 3px solid var(--accent);
+  padding: 8px 10px;
+  margin: 4px 0;
+  border-radius: 0 4px 4px 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  font-style: italic;
+}
+.log-entry.claude-think .label-inline {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-bottom: 3px;
+  font-style: normal;
+}
 
-/* Footer chat */
-.chat-pane {
-  border-top: 1px solid var(--border);
+/* ─────────────────────────────────────────────────────────────────────────
+   MAIN SCREEN (data-mode="main") — tiled bot views + QR code
+   ────────────────────────────────────────────────────────────────────────*/
+body[data-mode="main"] {
+  grid-template-rows: auto 1fr;
+}
+body[data-mode="main"] header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+}
+.join-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(94, 234, 212, 0.05);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.join-cta {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.join-url {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+  max-width: 220px;
+}
+#qr {
+  width: 90px;
+  height: 90px;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+/* New main layout: big overview on the left (60%), 2x2 bot tiles on the right */
+.main-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+  background: var(--bg);
+}
+.overview-pane {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--panel);
-  padding: 10px 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  min-height: 0;
+}
+.overview-header {
+  padding: 8px 14px;
+  background: linear-gradient(90deg, rgba(94, 234, 212, 0.15), var(--panel) 80%);
+  border-bottom: 1px solid var(--border);
+}
+.overview-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.overview-pane iframe {
+  flex: 1 1 auto;
+  width: 100%;
+  border: none;
+  background: #000;
+  min-height: 0;
+}
+.bots-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+.bot-tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 2px solid var(--bot-color, var(--border));
+  border-radius: 10px;
+  overflow: hidden;
+  min-height: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.bot-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--bot-color) 22%, var(--panel)),
+    var(--panel) 80%);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.bot-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bot-color, var(--accent));
+  box-shadow: 0 0 8px var(--bot-color, var(--accent));
+}
+.bot-name {
+  font-weight: 800;
+  color: var(--bot-color, var(--accent));
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 14px;
+}
+.bot-now {
+  margin-left: auto;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: rgba(0,0,0,0.3);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+.bot-tile-viewer {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000;
+}
+.bot-tile-viewer iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+  display: block;
+}
+/* Floating thought bubble overlaid on the viewer */
+.bot-tile-thought {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(13, 14, 18, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--bot-color, var(--accent));
+  border-left: 4px solid var(--bot-color, var(--accent));
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  font-style: italic;
+  max-height: 35%;
+  overflow-y: auto;
+  transition: opacity 1.5s ease;
+  opacity: 1;
+}
+.bot-tile-thought:empty { display: none; }
+.bot-tile-thought.fade { opacity: 0.25; }
+.bot-tile-thought[data-kind="user"] {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--accent-warm);
+  border-color: var(--accent-warm);
+}
+.bot-tile-log {
+  flex: 0 0 auto;
+  max-height: 90px;
+  overflow-y: auto;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 6px 12px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.bot-log-entry { padding: 1px 0; }
+.bot-log-entry .tool { color: var(--bot-color, var(--accent)); font-weight: 700; }
+.bot-log-entry .ok { color: var(--accent-go); }
+.bot-log-entry .err { color: var(--accent-warn); }
+.bot-log-entry .args { color: var(--text-dim); }
+.bot-log-entry .user { color: var(--accent-warm); font-weight: 600; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PHONE (data-mode="phone")
+   ────────────────────────────────────────────────────────────────────────*/
+body[data-mode="phone"] {
+  /* header (auto)  chat-pane (auto, sits up top so keyboards don't hide it)
+     main (1fr, scrolls) */
+  grid-template-rows: auto auto 1fr;
+  /* Use dynamic viewport height so the layout shrinks with the on-screen
+     keyboard instead of getting pushed off-screen. */
+  min-height: 100dvh;
+}
+.phone-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.bot-pill {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 13px;
+  margin-right: 10px;
+}
+.phone-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+}
+.picker {
+  padding: 24px 16px;
+}
+.picker h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.picker-grid {
+  display: grid;
+  gap: 10px;
+}
+.picker-card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+  padding: 16px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 18px;
+}
+
+/* Chat pane — sits directly under the header on phone, full-width input. */
+.chat-pane {
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -211,12 +513,14 @@ main {
 }
 .chat-form input {
   flex: 1;
+  min-width: 0;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 6px;
-  font-size: 14px;
+  /* 16px prevents iOS Safari from auto-zooming on focus. */
+  font-size: 16px;
   font-family: inherit;
 }
 .chat-form input:focus {

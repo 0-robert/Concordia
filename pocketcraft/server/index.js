@@ -1,22 +1,31 @@
-// Pocketcraft — Phase 1.1: orchestrator.
+// Pocketcraft — orchestrator (single-process, multi-agent, no TCP loopback).
 //
 // Boots a single Node process that hosts:
-//   • flying-squid Minecraft server bound to 127.0.0.1:25565
-//   • mineflayer bot that joins it as "Pocketcraft"
+//   • flying-squid Minecraft server
+//   • N mineflayer bots, each connected via an in-memory Duplex pair
+//   • prismarine-viewer (tracks the first bot's POV)
+//   • Command WS server with per-bot tool routing
 //
-// Phase 1.4 will replace the loopback TCP with an in-process Duplex pair.
-// For now we use real localhost TCP because it's easier to debug.
+// Critical: NO TCP loopback. BrowserPod blocks 127.0.0.1.
 
 const log = (tag, ...m) => console.log(`[${tag}]`, ...m);
 
+// Bot roster — names + viewer port. Each bot gets its own first-person
+// viewer instance so judges can see each bot's POV side-by-side.
+const BOTS = [
+  { name: "Alice", viewerPort: 3007 },
+  { name: "Bob",   viewerPort: 3017 },
+  { name: "Carl",  viewerPort: 3027 },
+  { name: "Dana",  viewerPort: 3037 },
+];
+
 async function main() {
-  // flying-squid writes log files relative to cwd, so make sure the dir exists
   require("fs").mkdirSync("logs", { recursive: true });
 
   log("boot", "starting flying-squid…");
   const { createMCServer } = require("flying-squid");
 
-  const MC_VERSION = "1.16.5"; // modern enough for normal item names
+  const MC_VERSION = "1.16.5";
   const PORT = 25565;
   const HOST = "127.0.0.1";
 
@@ -27,17 +36,16 @@ async function main() {
     host: HOST,
     "online-mode": false,
     logging: true,
-    gameMode: 1, // creative — bot can fly + place anything (nice for scripted demo)
+    gameMode: 1,
     difficulty: 1,
-    worldFolder: null, // ephemeral, in-memory
+    worldFolder: null,
     generation: { name: "superflat", options: { worldHeight: 80 } },
     kickTimeout: 10_000,
     plugins: {},
     "everybody-op": true,
     "max-entities": 100,
-    "view-distance": 10, // CRITICAL — without this no chunks ever get sent
+    "view-distance": 10,
     modpe: false,
-    "max-players": 4,
     version: MC_VERSION,
     "player-list-text": { header: "", footer: "" },
   });
@@ -45,135 +53,139 @@ async function main() {
   server.on("listening", () => log("server", `listening on ${HOST}:${PORT}`));
   server.on("error", (e) => log("server-err", e));
 
-  // Wait for server to be ready before connecting bot
   await new Promise((resolve) => server.on("listening", resolve));
 
-  const { seedWorld, seedBotInventory } = require("./worldSetup");
-
-  log("boot", "starting mineflayer bot…");
-  const mineflayer = require("mineflayer");
-  const { pathfinder, Movements, goals } = require("mineflayer-pathfinder");
-  const bot = mineflayer.createBot({
-    host: HOST,
-    port: PORT,
-    username: "Pocketcraft",
-    version: MC_VERSION,
-    auth: "offline",
-  });
-  bot.loadPlugin(pathfinder);
-
-  bot.on("error", (e) => log("bot-err", e.message));
-  bot.on("kicked", (reason) => log("bot-kick", reason));
-  bot.on("end", (reason) => log("bot-end", reason));
-
-  let chunksLoaded = 0;
-  bot.on("chunkColumnLoad", () => { chunksLoaded++; });
-
-  // Log every packet name received — to see if chunk packets even arrive
-  const seenPackets = {};
-  bot._client.on("packet", (data, meta) => {
-    seenPackets[meta.name] = (seenPackets[meta.name] || 0) + 1;
-  });
-  setInterval(() => {
-    log("chunks", `loaded so far: ${chunksLoaded}`);
-    log("packets", JSON.stringify(seenPackets));
-  }, 3000);
-
-  bot.once("spawn", async () => {
-    const p = bot.entity.position;
-    log("bot", `spawned at ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`);
-    log("bot", `game=${bot.game.gameMode}`);
-
-    // Seed inventory
+  // ── Spawn bots in sequence (so each gets its own duplex + spawn event) ──
+  const { makeBot } = require("./bot");
+  const bots = [];
+  for (const def of BOTS) {
+    log("boot", `spawning bot '${def.name}'…`);
     try {
-      await seedBotInventory(bot, MC_VERSION);
-      log("bot", "inventory seeded");
-      const items = bot.inventory.items().map(i => `${i.name}x${i.count}`);
-      log("bot", `inv: ${items.join(", ")}`);
+      const b = await makeBot(server, def.name, MC_VERSION);
+      b.viewerPort = def.viewerPort;
+      bots.push(b);
     } catch (e) {
-      log("inv-err", e.stack || e.message);
+      log("boot-err", `failed to spawn ${def.name}: ${e.message}`);
     }
+  }
+  log("boot", `${bots.length} bots ready: ${bots.map((b) => b.name).join(", ")}`);
 
-    // Wait for the bot to actually have chunks loaded before seeding,
-    // otherwise our setBlock fires while chunks are mid-stream and
-    // the block_change packets get lost.
-    await new Promise((r) => setTimeout(r, 1500));
+  if (bots.length === 0) {
+    log("fatal", "no bots spawned, exiting");
+    return;
+  }
 
-    // Seed world relative to bot's actual position
-    let seedPositions;
-    try {
-      seedPositions = await seedWorld(server, MC_VERSION, bot.entity.position);
-      log("world", `craftingTable=${seedPositions.craftingTable}`);
-      log("world", `diamondVein=${seedPositions.diamondVein}`);
-    } catch (e) {
-      log("world-err", e.stack || e.message);
-    }
+  // ── Seed the world AFTER bots have joined (so chunks are loaded) ──
+  // Seed relative to the FIRST bot's position so structures are visible.
+  await new Promise((r) => setTimeout(r, 1500));
+  const { seedWorld } = require("./worldSetup");
+  let seedPositions;
+  try {
+    seedPositions = await seedWorld(server, MC_VERSION, bots[0].bot.entity.position);
+    log("world", `craftingTable=${seedPositions.craftingTable}`);
+    log("world", `diamondVein=${seedPositions.diamondVein}`);
+  } catch (e) {
+    log("world-err", e.stack || e.message);
+  }
 
-    // Prismarine-viewer in first-person — hides the static bot body
-    // ("looking through the bot's eyes"). Better than third-person because
-    // we don't have skeletal animations to make the body look natural.
-    try {
-      const { mineflayer: mfViewer } = require("prismarine-viewer");
-      mfViewer(bot, { port: 3007, firstPerson: true });
-      log("viewer", "prismarine-viewer (first-person) on :3007");
-    } catch (e) {
-      log("viewer-err", e.stack || e.message);
-    }
+  // ── prismarine-viewer: one first-person per bot + one OVERVIEW (orbit) ──
+  // Overview tracks the first bot but in third-person so judges can drag
+  // the camera around and see all agents at once.
+  const OVERVIEW_PORT = 3047;
+  try {
+    const { mineflayer: mfViewer } = require("prismarine-viewer");
 
-    // Command WS server
-    try {
-      const { CommandServer } = require("./commands");
-      const { makeTools } = require("./tools");
-      const cmd = new CommandServer({ port: 3008, log });
-      const tools = makeTools(bot, MC_VERSION);
-      for (const [name, fn] of Object.entries(tools)) {
-        cmd.registerTool(name, fn);
+    // Per-bot first-person tiles
+    for (const b of bots) {
+      mfViewer(b.bot, { port: b.viewerPort, firstPerson: true });
+      // Suppress usernames in entity emits — chunky floating names look bad
+      const view = b.bot.viewer;
+      if (view && view.emitter) {
+        const origEmit = view.emitter.emit.bind(view.emitter);
+        view.emitter.emit = (event, payload, ...rest) => {
+          if (event === "entity" && payload && typeof payload === "object") {
+            payload = { ...payload, username: undefined };
+          }
+          return origEmit(event, payload, ...rest);
+        };
       }
-      cmd.start();
+      log("viewer", `${b.name} POV on :${b.viewerPort}`);
+    }
 
-      // Stream key bot events to clients
+    // Overview viewer: third-person orbit around bots[0]. Judges can drag
+    // to spin/zoom; covers the whole scene from up high.
+    mfViewer(bots[0].bot, { port: OVERVIEW_PORT, firstPerson: false });
+    log("viewer", `OVERVIEW (third-person, orbit) on :${OVERVIEW_PORT}`);
+  } catch (e) {
+    log("viewer-err", e.stack || e.message);
+  }
+  // Stash for the /bots endpoint to expose
+  global.__overviewPort = OVERVIEW_PORT;
+
+  // ── Command WS server with per-bot routing ──
+  try {
+    const { CommandServer } = require("./commands");
+    const { startRelayBridge } = require("./relayBridge");
+
+    // The TV screen POSTs the pod's relay URL once the pod portal fires.
+    // We track the live bridge here so we can replace it on subsequent
+    // boots (e.g., the user reloads main.html and the pod gets a new URL).
+    let activeBridge = null;
+    let cmd; // forward-reference — onRelayUrl runs after cmd is constructed.
+    const onRelayUrl = (url) => {
+      if (activeBridge) {
+        log("relay", `replacing existing bridge → ${url}`);
+        activeBridge.close();
+      }
+      activeBridge = startRelayBridge({ relayUrl: url, cmdServer: cmd, log });
+    };
+
+    cmd = new CommandServer({ port: 3008, log, onRelayUrl });
+    for (const { name, tools, viewerPort } of bots) {
+      cmd.registerBot(name, tools, viewerPort);
+    }
+    cmd.start();
+
+    // Boot-time fallback: env var works the same as POST /relay-url, useful
+    // for headless / scripted runs.
+    if (process.env.POCKETCRAFT_RELAY_URL) {
+      onRelayUrl(process.env.POCKETCRAFT_RELAY_URL);
+    }
+
+    // Forward in-game chat from any bot back to UI
+    for (const { name, bot } of bots) {
       bot.on("playerChat", (username, message) =>
-        cmd.broadcast({ event: "bot_event", type: "chat", username, message })
+        cmd.broadcast({
+          event: "bot_event",
+          bot: name,
+          type: "chat",
+          username,
+          message,
+        })
       );
-      bot.on("health", () =>
-        cmd.broadcast({ event: "bot_event", type: "health", health: bot.health, food: bot.food })
-      );
-    } catch (e) {
-      log("cmd-err", e.stack || e.message);
     }
+  } catch (e) {
+    log("cmd-err", e.stack || e.message);
+  }
 
-    // (the 360° verification spin is removed — pathfinder needs precise yaw control)
+  // Greeting chats so we know each bot is alive
+  setTimeout(() => {
+    for (const { name, bot } of bots) {
+      bot.chat(`hi, i'm ${name}`);
+    }
+  }, 2000);
 
-    setTimeout(() => bot.chat("hello from pocketcraft"), 1000);
-
-    // Verify bot can see seeded blocks
-    setTimeout(() => {
-      const diamond = bot.findBlock({
-        matching: (b) => b && b.name === "diamond_ore",
-        maxDistance: 64,
-      });
-      const table = bot.findBlock({
-        matching: (b) => b && b.name === "crafting_table",
-        maxDistance: 64,
-      });
-      log("scan", `diamond_ore: ${diamond ? diamond.position : "NOT FOUND"}`);
-      log("scan", `crafting_table: ${table ? table.position : "NOT FOUND"}`);
-
-      // Also try directly inspecting the block at the seeded coord
-      if (seedPositions) {
-        const tbl = bot.blockAt(seedPositions.craftingTable);
-        const dia = bot.blockAt(seedPositions.diamondVein);
-        log("scan", `bot.blockAt(table): ${tbl?.name}`);
-        log("scan", `bot.blockAt(diamond): ${dia?.name}`);
-      }
-    }, 4000);
-
-    setInterval(() => {
-      if (!bot.entity) return;
+  // Periodic heartbeat
+  setInterval(() => {
+    for (const { name, bot } of bots) {
+      if (!bot.entity) continue;
       const p = bot.entity.position;
-      log("tick", `pos=(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`);
-    }, 5000);
-  });
+      log(
+        "tick",
+        `${name} pos=(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`
+      );
+    }
+  }, 10_000);
 }
 
 main().catch((e) => {

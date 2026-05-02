@@ -1,13 +1,21 @@
 // Pocketcraft host page.
 //
-// Connects to the in-pod (or local) command WS server, renders agent state
-// live: goal, current action, inventory, scrolling log.
+// Boots a BrowserPod inside this tab, runs the MC server in it, then wires
+// the in-pod viewer + command WS to the UI. User input → Claude → tool-use
+// loop → bot.
 //
-// For Phase 4 we use a hardcoded "router" between user input and tool calls
-// (no Claude yet). Phase 5 swaps that for a real Claude tool-use loop.
+// `?local=1` skips the pod and connects to localhost:3007/3008 (dev mode).
 
-const CMD_WS = "ws://localhost:3008";
-const VIEWER_URL = "http://localhost:3007";
+import { runClaudeTurn } from "./claude.js";
+import { bootPod } from "./bootPod.js";
+
+const params = new URLSearchParams(location.search);
+const LOCAL_MODE = params.get("local") === "1";
+const BOT_NAME = params.get("bot") || "Alice"; // Alice or Bob
+
+document.title = `Pocketcraft — ${BOT_NAME}`;
+document.body.setAttribute("data-bot", BOT_NAME);
+if (LOCAL_MODE) document.body.setAttribute("data-mode", "local");
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -19,7 +27,11 @@ const logEl = $("log");
 const chatForm = $("chat-form");
 const chatInput = $("chat-input");
 
-$("viewer").src = VIEWER_URL;
+const botTagName = $("bot-tag-name");
+if (botTagName) botTagName.textContent = BOT_NAME;
+
+let CMD_WS = null;
+let VIEWER_URL = null;
 
 // ─── log / state ─────────────────────────────────────────────────────────────
 function logEntry(html, cls = "") {
@@ -64,9 +76,11 @@ function call(tool, args = {}) {
     return Promise.reject(new Error("not connected"));
   }
   const id = String(nextId++);
+  const msg = { id, bot: BOT_NAME, tool, args };
+  console.log("[ws>>]", msg);
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    ws.send(JSON.stringify({ id, tool, args }));
+    ws.send(JSON.stringify(msg));
   });
 }
 
@@ -86,35 +100,44 @@ function connect() {
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
+    console.log("[ws<<]", msg);
 
-    // Tool response (id-keyed)
-    if (msg.id !== undefined) {
-      const p = pending.get(msg.id);
-      if (p) {
-        pending.delete(msg.id);
-        if (msg.ok) p.resolve(msg.result);
-        else p.reject(new Error(msg.error));
-      }
-      return;
-    }
-
-    // Event broadcast
+    // Events FIRST. tool_start/tool_end carry `bot` field; only show ours.
     if (msg.event === "tool_start") {
+      if (msg.bot !== BOT_NAME) return; // not for us
       setNow(`${msg.tool}(${formatArgs(msg.args)})`);
       logEntry(`<span class="tool">→ ${msg.tool}</span> <span class="args">${formatArgs(msg.args)}</span>`);
-    } else if (msg.event === "tool_end") {
+      return;
+    }
+    if (msg.event === "tool_end") {
+      if (msg.bot !== BOT_NAME) return;
       if (msg.ok) {
         logEntry(`<span class="ok">  ✓ ${msg.tool}</span> <span class="args">${truncate(JSON.stringify(msg.result))}</span>`);
       } else {
         logEntry(`<span class="err">  ✗ ${msg.tool}</span> <span class="args">${msg.error}</span>`);
       }
-      // After mutating tools, refresh inventory cheaply
       if (["mine", "equip", "craft"].includes(msg.tool)) refreshInventory();
-    } else if (msg.event === "bot_event" && msg.type === "chat") {
-      // Don't echo our own bot's chats — they're already self-narrated.
-      // But other-player chat would surface here.
-    } else if (msg.event === "hello") {
-      logEntry(`<span class="args">tools: ${msg.tools.join(", ")}</span>`);
+      return;
+    }
+    if (msg.event === "hello") {
+      const bots = msg.bots?.length ? msg.bots.join(", ") : "(none)";
+      logEntry(`<span class="args">connected — bots in world: ${bots}, controlling: ${BOT_NAME}</span>`);
+      if (!msg.bots?.includes(BOT_NAME)) {
+        logEntry(`<span class="err">⚠ bot '${BOT_NAME}' not found in pod — try ?bot=Alice or ?bot=Bob</span>`);
+      }
+      return;
+    }
+    if (msg.event === "bot_event") return; // reserved
+
+    // Tool response (id-keyed, no event field)
+    if (msg.id !== undefined) {
+      const p = pending.get(msg.id);
+      if (p) {
+        pending.delete(msg.id);
+        if (msg.ok) p.resolve(msg.result);
+        else p.reject(new Error(String(msg.error || "(no error message)")));
+      }
+      return;
     }
   };
 }
@@ -137,41 +160,55 @@ async function refreshInventory() {
   } catch {}
 }
 
-// ─── chat → tool router (Phase 4 stub; replaced by Claude in Phase 5) ────────
+// ─── user input → Claude tool-use loop → bot ─────────────────────────────────
+
+// We carry forward the full conversation so Claude remembers prior turns
+// (e.g. "now stop" should make sense in context).
+let conversationHistory = [];
+
 async function handleUserMessage(text) {
   logEntry(`<span class="speaker">you ▸</span> ${text}`, "user");
   setGoal(text);
+  setNow("thinking…");
+  chatForm.querySelector("button").disabled = true;
 
-  // Crude keyword router until we wire Claude. Just enough for live demos.
-  const t = text.toLowerCase();
   try {
-    if (/(diamond|chestplate|chest plate)/.test(t)) {
-      // Mini chestplate scenario (no actual chestplate yet — needs 8 diamonds + path)
-      setNow("planning: collect diamonds → craft");
-      const dia = await call("findBlock", { name: "diamond_ore" });
-      if (!dia.found) return chatBack("no diamond ore in sight");
-      await call("equip", { name: "iron_pickaxe" });
-      await call("goTo", { ...dia.position, range: 2, why: "diamond ore" });
-      await call("mine", { ...dia.position, why: "for chestplate" });
-    } else if (/(go to|walk to).*diamond/.test(t)) {
-      const dia = await call("findBlock", { name: "diamond_ore" });
-      if (!dia.found) return chatBack("no diamond ore in sight");
-      await call("goTo", { ...dia.position, range: 2, why: "diamond ore" });
-    } else if (/inventory|carrying|holding/.test(t)) {
-      const items = await call("inventory");
-      const summary = items.map(i => `${i.name} ×${i.count}`).join(", ");
-      await call("chat", { text: `i'm carrying: ${summary}` });
-    } else {
-      await call("chat", { text: "got it: " + text });
-    }
+    conversationHistory = await runClaudeTurn(text, call, {
+      botName: BOT_NAME,
+      messages: conversationHistory,
+      onStep: (e) => {
+        if (e.kind === "thinking") {
+          setNow(`claude thinking (turn ${e.turn + 1})…`);
+        } else if (e.kind === "assistant_text") {
+          logEntry(
+            `<span class="label-inline">CLAUDE THINKING</span>${escapeHtml(e.text)}`,
+            "claude-think"
+          );
+        } else if (e.kind === "tool_call") {
+          // The server's tool_start broadcast will also fire — this just
+          // gives us a claude-level trace of the reasoning. Skip to avoid dup.
+        } else if (e.kind === "tool_result") {
+          // Same — server broadcasts tool_end already.
+        }
+      },
+    });
     setNow("idle");
   } catch (e) {
-    logEntry(`<span class="err">router error: ${e.message}</span>`);
-    setNow("error: " + e.message);
+    const msg = e.message || JSON.stringify(e) || "unknown";
+    logEntry(`<span class="err">claude error: ${msg}</span>`);
+    setNow("error: " + msg);
+    console.error("claude err:", e);
+  } finally {
+    chatForm.querySelector("button").disabled = false;
+    refreshInventory();
   }
 }
-function chatBack(s) {
-  logEntry(`<span class="args">  bot: ${s}</span>`);
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 // ─── wire UI ─────────────────────────────────────────────────────────────────
@@ -189,4 +226,44 @@ for (const chip of document.querySelectorAll(".chip")) {
   });
 }
 
-connect();
+// ─── boot ────────────────────────────────────────────────────────────────────
+
+(async function bootEverything() {
+  try {
+    if (LOCAL_MODE) {
+      setStatus("local mode — connecting to localhost…");
+      logEntry(`<span class="args">[local] using ws://localhost:3008 + http://localhost:3007</span>`);
+      VIEWER_URL = "http://localhost:3007";
+      CMD_WS = "ws://localhost:3008";
+    } else {
+      setStatus("booting pod…");
+      logEntry(`<span class="args">★ booting BrowserPod (this can take 1-3 min on first boot)…</span>`);
+      const podTermEl = $("pod-terminal") || (() => {
+        // create a hidden div if HTML doesn't have one — pod docs say don't unmount it
+        const el = document.createElement("div");
+        el.id = "pod-terminal";
+        el.style.position = "absolute";
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
+        el.style.width = "1px";
+        el.style.height = "1px";
+        document.body.appendChild(el);
+        return el;
+      })();
+
+      const { viewerUrl, cmdWsUrl } = await bootPod({
+        terminalEl: podTermEl,
+        log: (s) => logEntry(`<span class="args">${escapeHtml(s)}</span>`),
+      });
+      VIEWER_URL = viewerUrl;
+      CMD_WS = cmdWsUrl;
+    }
+
+    $("viewer").src = VIEWER_URL;
+    connect();
+  } catch (e) {
+    setStatus("boot failed");
+    logEntry(`<span class="err">boot failed: ${escapeHtml(e.message || String(e))}</span>`);
+    console.error("boot failed:", e);
+  }
+})();

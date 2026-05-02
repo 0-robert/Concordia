@@ -1,0 +1,7 @@
+{
+  "name": "canvas",
+  "version": "0.0.0-stub",
+  "description": "Stub for prismarine-viewer's canvas dep — used only for player nametags which we don't render. Replaces real `canvas` (which has a native compile step that hangs in BrowserPod).",
+  "main": "index.js",
+  "license": "MIT"
+}

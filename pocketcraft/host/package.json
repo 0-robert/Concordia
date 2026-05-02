@@ -4,11 +4,17 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "bundle": "bash ../pod-host/build-bundle.sh",
+    "predev": "npm run bundle",
+    "prebuild": "npm run bundle",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
     "vite": "^7.2.4"
+  },
+  "dependencies": {
+    "@leaningtech/browserpod": "^2.3.1"
   }
 }

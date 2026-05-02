@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pocketcraft — AI in the Box</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Pocketcraft <span class="tag">AI in the Box</span></h1>
+      <div id="status" class="status">connecting…</div>
+    </header>
+
+    <main>
+      <section class="viewer-pane">
+        <iframe id="viewer" title="bot POV" src="http://localhost:3007"></iframe>
+      </section>
+
+      <aside class="agent-pane">
+        <div class="goal-card">
+          <div class="label">GOAL</div>
+          <div id="goal" class="goal-text">awaiting instruction…</div>
+        </div>
+
+        <div class="card">
+          <div class="label">NOW</div>
+          <div id="now-action" class="now-action">idle</div>
+        </div>
+
+        <div class="card">
+          <div class="label">INVENTORY</div>
+          <div id="inventory" class="inv"></div>
+        </div>
+
+        <div class="card flex-grow">
+          <div class="label">AGENT LOG</div>
+          <div id="log" class="log"></div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="chat-pane">
+      <div id="chat-suggestions" class="suggestions">
+        <button class="chip">make me a diamond chestplate</button>
+        <button class="chip">go to the diamond ore</button>
+        <button class="chip">tell me what's in your inventory</button>
+      </div>
+      <form id="chat-form" class="chat-form">
+        <input
+          id="chat-input"
+          type="text"
+          placeholder="Ask the bot to do something…"
+          autocomplete="off"
+        />
+        <button type="submit">Send</button>
+      </form>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

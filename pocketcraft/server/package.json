@@ -1,0 +1,17 @@
+{
+  "name": "pocketcraft-server",
+  "version": "0.0.1",
+  "description": "MC server + LLM-controlled bot, single Node process, pod-deployable",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "flying-squid": "^1.12.0",
+    "mineflayer": "^4.37.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "prismarine-viewer": "^1.32.0",
+    "ws": "^8.18.0"
+  }
+}

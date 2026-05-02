@@ -39,7 +39,10 @@ async function main() {
     gameMode: 1,
     difficulty: 1,
     worldFolder: null,
-    generation: { name: "superflat", options: { worldHeight: 80 } },
+    // diamond_square is flying-squid's built-in realistic terrain
+    // generator — natural hills, trees, stone layers. "seed" is fixed
+    // so the demo world is reproducible across restarts.
+    generation: { name: "diamond_square", options: { seed: 42424242, worldHeight: 80 } },
     kickTimeout: 10_000,
     plugins: {},
     "everybody-op": true,
@@ -55,13 +58,27 @@ async function main() {
 
   await new Promise((resolve) => server.on("listening", resolve));
 
+  // ── Shared world state — exposed to every bot's `team` + `deposit` ──
+  // bots:            [{name, bot, tools, ...}] — populated as we spawn each
+  // sharedChest:     Vec3 — set after worldSetup returns
+  // chestContents:   { [itemName]: count } — grows with deposit() calls
+  // lastActions:     Map<botName, {tool, argsSummary, time}>
+  // onChestChange:   callback to broadcast chest state to phones + TV
+  const world = {
+    bots: [],
+    sharedChest: null,
+    chestContents: {},
+    lastActions: new Map(),
+    onChestChange: null, // wired below once CommandServer is up
+  };
+
   // ── Spawn bots in sequence (so each gets its own duplex + spawn event) ──
   const { makeBot } = require("./bot");
-  const bots = [];
+  const bots = world.bots;
   for (const def of BOTS) {
     log("boot", `spawning bot '${def.name}'…`);
     try {
-      const b = await makeBot(server, def.name, MC_VERSION);
+      const b = await makeBot(server, def.name, MC_VERSION, world);
       b.viewerPort = def.viewerPort;
       bots.push(b);
     } catch (e) {
@@ -82,8 +99,43 @@ async function main() {
   let seedPositions;
   try {
     seedPositions = await seedWorld(server, MC_VERSION, bots[0].bot.entity.position);
+    log("world", `basePlaza=${seedPositions.basePlaza}`);
     log("world", `craftingTable=${seedPositions.craftingTable}`);
-    log("world", `diamondVein=${seedPositions.diamondVein}`);
+    log("world", `sharedChest=${seedPositions.sharedChest}`);
+    log("world", `${seedPositions.diamondSpots.length} exposed diamond veins`);
+    // Expose chest position to all tools via the shared world object
+    world.sharedChest = seedPositions.sharedChest;
+
+    // Teleport bots onto the surface near the base plaza (on natural terrain
+    // they spawn underground because flying-squid's spawn logic runs before
+    // our world is ready to query).
+    const base = seedPositions.basePlaza;
+    const tpOffsets = [
+      { dx:  2, dz:  2 },
+      { dx: -2, dz:  2 },
+      { dx:  2, dz: -2 },
+      { dx: -2, dz: -2 },
+    ];
+    for (let i = 0; i < bots.length; i++) {
+      const off = tpOffsets[i % tpOffsets.length];
+      const tx = base.x + off.dx;
+      const tz = base.z + off.dz;
+      const ty = base.y + 1; // one above the grass cap
+      try {
+        const player = server.players.find((p) => p.username === bots[i].name);
+        const { Vec3 } = require("vec3");
+        const tpVec = new Vec3(tx, ty, tz);
+        if (player && typeof player.sendSelfPosition === "function") {
+          player.position = tpVec;
+          player.sendSelfPosition(tpVec);
+        }
+        // Also force-update the mineflayer-side view
+        bots[i].bot.entity.position.set(tx, ty, tz);
+        log("world", `tp ${bots[i].name} → (${tx}, ${ty}, ${tz})`);
+      } catch (e) {
+        log("world-err", `tp ${bots[i].name}: ${e.message}`);
+      }
+    }
   } catch (e) {
     log("world-err", e.stack || e.message);
   }
@@ -145,6 +197,31 @@ async function main() {
       cmd.registerBot(name, tools, viewerPort);
     }
     cmd.start();
+
+    // Track each tool call as "lastAction" on the world, so the `team`
+    // tool can tell other bots what this one is currently doing.
+    cmd.addBroadcastSink((evt) => {
+      if (evt.event === "tool_start" && evt.bot) {
+        const summary = (() => {
+          if (!evt.args) return "";
+          const kvs = Object.entries(evt.args)
+            .filter(([k]) => k !== "why")
+            .slice(0, 2)
+            .map(([k, v]) => typeof v === "string" ? `${k}="${v.slice(0, 20)}"` : `${k}=${v}`);
+          return kvs.join(",");
+        })();
+        world.lastActions.set(evt.bot, {
+          tool: evt.tool, argsSummary: summary, time: Date.now(),
+        });
+      }
+    });
+
+    // Broadcast chest contents whenever it changes so the TV/phones can
+    // render a shared "community chest" indicator — the visual payoff
+    // of the deposit tool.
+    world.onChestChange = (contents) => {
+      cmd.broadcast({ event: "chest_state", contents });
+    };
 
     // Boot-time fallback: env var works the same as POST /relay-url, useful
     // for headless / scripted runs.

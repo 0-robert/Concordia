@@ -45,7 +45,7 @@ const RECIPES = {
   fishing_rod:        { inputs: [{name:"stick", count:3}, {name:"string", count:2}], out_count: 1, nearTable: true },
 };
 
-function makeTools(bot, mcVersion, server) {
+function makeTools(bot, mcVersion, server, world = null) {
   const mcData = require("minecraft-data")(mcVersion);
   const Block = server ? require("prismarine-block")(mcVersion) : null;
 
@@ -295,6 +295,105 @@ function makeTools(bot, mcVersion, server) {
 
       narrate(`✓ crafted ${name}`);
       return { crafted: name, count: recipe.out_count * count };
+    },
+
+    /**
+     * See what the OTHER bots in the world are doing. Returns a list of
+     * {name, pos, inventorySummary, lastAction} for every other agent.
+     * Use this BEFORE starting a task so you don't duplicate another
+     * bot's work.
+     */
+    team: async () => {
+      if (!world || !Array.isArray(world.bots)) {
+        return { teammates: [] };
+      }
+      const mePos = bot.entity?.position;
+      const others = [];
+      for (const peer of world.bots) {
+        if (peer?.bot === bot) continue; // skip self
+        const pb = peer.bot;
+        if (!pb || !pb.entity) continue;
+        const pp = pb.entity.position;
+        const items = pb.inventory.items();
+        const summary = items.length === 0
+          ? "empty"
+          : items.slice(0, 6).map((i) => `${i.name}×${i.count}`).join(", ");
+        const dist = mePos
+          ? Math.round(mePos.distanceTo(pp))
+          : null;
+        const last = world.lastActions?.get(peer.name);
+        others.push({
+          name: peer.name,
+          pos: { x: Math.round(pp.x), y: Math.round(pp.y), z: Math.round(pp.z) },
+          distanceFromMe: dist,
+          inventory: summary,
+          lastAction: last ? `${last.tool}(${last.argsSummary || ""})` : "unknown",
+        });
+      }
+      return { teammates: others, sharedChest: world.sharedChest || null };
+    },
+
+    /**
+     * Walk to the shared team chest and deposit items. Items with `name`
+     * (and optional `count`) are removed from the bot's inventory and
+     * added to the shared chest state. If `name` is omitted, deposit
+     * everything except critical tools (pickaxes).
+     */
+    deposit: async ({ name = null, count = null } = {}) => {
+      if (!world || !world.sharedChest) {
+        throw new Error("no shared chest configured");
+      }
+      const chestPos = world.sharedChest;
+      // Walk near the chest
+      await bot.pathfinder.goto(
+        new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2)
+      );
+      const items = bot.inventory.items();
+      const toDeposit = [];
+      if (name) {
+        // Deposit a specific item
+        let remaining = count ?? Infinity;
+        for (const it of items) {
+          if (it.name !== name) continue;
+          const take = Math.min(it.count, remaining);
+          if (take <= 0) break;
+          toDeposit.push({ slot: it.slot, name: it.name, count: take, origCount: it.count });
+          remaining -= take;
+          if (remaining <= 0) break;
+        }
+        if (toDeposit.length === 0) throw new Error(`no ${name} in inventory`);
+      } else {
+        // Deposit everything except pickaxes (bot's tools)
+        for (const it of items) {
+          if (/_pickaxe$|_axe$|_sword$/.test(it.name)) continue;
+          toDeposit.push({ slot: it.slot, name: it.name, count: it.count, origCount: it.count });
+        }
+      }
+      // Apply: remove from bot inv, add to chest state
+      if (!world.chestContents) world.chestContents = {};
+      const deposited = {};
+      for (const d of toDeposit) {
+        const leftover = d.origCount - d.count;
+        if (leftover === 0) {
+          if (bot.inventory.updateSlot) bot.inventory.updateSlot(d.slot, null);
+          else bot.inventory.slots[d.slot] = null;
+        } else {
+          // Partial — rebuild a stack with leftover
+          const { Item } = require("prismarine-item")(mcVersion);
+          const id = mcData.itemsByName[d.name]?.id;
+          if (id) {
+            const left = new Item(id, leftover);
+            if (bot.inventory.updateSlot) bot.inventory.updateSlot(d.slot, left);
+            else bot.inventory.slots[d.slot] = left;
+          }
+        }
+        world.chestContents[d.name] = (world.chestContents[d.name] || 0) + d.count;
+        deposited[d.name] = (deposited[d.name] || 0) + d.count;
+      }
+      // Notify world listeners (e.g. the main-screen chest panel)
+      if (world.onChestChange) world.onChestChange(world.chestContents);
+      narrate(`deposited ${Object.entries(deposited).map(([k, v]) => `${v} ${k}`).join(", ")}`);
+      return { deposited, chest: { ...world.chestContents } };
     },
   };
 

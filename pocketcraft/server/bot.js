@@ -24,7 +24,7 @@ const log = (tag, ...m) => console.log(`[${tag}]`, ...m);
  * @param {string} mcVersion e.g. "1.16.5"
  * @returns {Promise<{bot, name, tools, position}>}
  */
-async function makeBot(server, name, mcVersion) {
+async function makeBot(server, name, mcVersion, world = null) {
   log(`bot:${name}`, "creating duplex pair…");
   const { serverEnd, clientEnd } = makeDuplexPair();
 
@@ -74,7 +74,8 @@ async function makeBot(server, name, mcVersion) {
 
   // Build tools bound to this bot — server reference allows place to write
   // blocks directly via server.setBlock instead of fighting MC protocol.
-  const tools = makeTools(bot, mcVersion, server);
+  // `world` (if provided) exposes cross-bot state for the team + deposit tools.
+  const tools = makeTools(bot, mcVersion, server, world);
 
   return { bot, name, tools, position: bot.entity.position.clone() };
 }

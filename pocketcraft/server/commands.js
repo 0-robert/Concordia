@@ -18,7 +18,7 @@
 const { WebSocketServer } = require("ws");
 
 class CommandServer {
-  constructor({ port, log, onRelayUrl }) {
+  constructor({ port, log, onRelayUrl, onTeamPrompt }) {
     this.port = port;
     this.log = log || (() => {});
     this.bots = new Map(); // name → { tools }
@@ -30,6 +30,9 @@ class CommandServer {
     // Called when POST /relay-url arrives. Lets server/index.js (re)spawn
     // the relayBridge against a freshly-booted pod portal.
     this.onRelayUrl = onRelayUrl || (() => {});
+    // Called when POST /team-prompt arrives. Lets server/index.js kick off
+    // a Claude-driven team loop across all bots.
+    this.onTeamPrompt = onTeamPrompt || (() => {});
   }
 
   /** Snapshot of current bots, suitable for /api/bots payload. */
@@ -74,6 +77,32 @@ class CommandServer {
           bots: this.listBots(),
           overviewPort: global.__overviewPort || null,
         }));
+        return;
+      }
+
+      // POST /team-prompt  body: {prompt}  — TV screen kicks off a
+      // Claude-driven team loop across all bots.
+      if (req.method === "POST" && req.url === "/team-prompt") {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            const { prompt } = JSON.parse(body || "{}");
+            if (typeof prompt !== "string" || !prompt.trim()) {
+              throw new Error("expected { prompt: 'non-empty string' }");
+            }
+            // Fire-and-forget; the team loop runs async and broadcasts events.
+            Promise.resolve(this.onTeamPrompt(prompt)).catch((e) =>
+              this.log("team-err", e?.message || String(e)),
+            );
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true }));
+          } catch (e) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+          }
+        });
         return;
       }
 

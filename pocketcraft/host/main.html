@@ -13,14 +13,26 @@
         <span class="tag">AI in the Box</span>
         <span id="status" class="status">connecting…</span>
       </h1>
-      <div id="join-info" class="join-info">
-        <div class="join-text">
-          <div class="join-cta">📱 Scan to control a bot</div>
-          <div class="join-url" id="join-url">…</div>
+      <div class="header-cluster">
+        <button id="run-team-demo" class="team-demo-btn" title="Hardcoded multi-agent demo">
+          🚀 RUN TEAM DEMO
+        </button>
+        <button id="chest-toggle" class="chest-toggle" title="Click to view shared chest">
+          🎁 <span id="chest-badge">0</span>
+        </button>
+        <div id="join-info" class="join-info">
+          <div class="join-text">
+            <div class="join-cta">📱 Scan to control a bot</div>
+            <div class="join-url" id="join-url">…</div>
+          </div>
+          <canvas id="qr" width="180" height="180"></canvas>
         </div>
-        <canvas id="qr" width="180" height="180"></canvas>
       </div>
     </header>
+    <div id="chest-panel" class="chest-panel" hidden>
+      <div class="chest-panel-title">SHARED CHEST</div>
+      <div class="chest-panel-items" id="chest-items">empty</div>
+    </div>
 
     <main class="main-layout">
       <section class="overview-pane">

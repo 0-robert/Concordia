@@ -28,6 +28,69 @@ const statusEl = $("status");
 const joinUrlEl = $("join-url");
 const qrCanvas = $("qr");
 
+// ─── Canned team demo prompt ────────────────────────────────────────────────
+// One hardcoded multi-agent prompt that we've pre-tested. Click 🚀 → run.
+const CANNED_TEAM_PROMPT =
+  "Each of you find a different diamond_ore vein and bring all the diamonds back to the shared team chest. Call the team tool first to coordinate — DON'T duplicate efforts. Pick a unique direction, mine, then deposit. Stop after depositing.";
+
+const teamBtn = $("run-team-demo");
+if (teamBtn) {
+  teamBtn.addEventListener("click", async () => {
+    teamBtn.disabled = true;
+    const oldText = teamBtn.textContent;
+    teamBtn.textContent = "▶ running…";
+    try {
+      const r = await fetch(`${HTTP_BASE}/team-prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: CANNED_TEAM_PROMPT }),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`HTTP ${r.status}: ${t}`);
+      }
+    } catch (e) {
+      alert("Team demo failed: " + e.message);
+      console.error(e);
+    } finally {
+      // Re-enable after a beat — the prompt continues running in the bg.
+      setTimeout(() => {
+        teamBtn.disabled = false;
+        teamBtn.textContent = oldText;
+      }, 3000);
+    }
+  });
+}
+
+// ─── Chest panel ─────────────────────────────────────────────────────────────
+const chestToggle = $("chest-toggle");
+const chestBadge = $("chest-badge");
+const chestPanel = $("chest-panel");
+const chestItems = $("chest-items");
+let lastChest = {};
+
+if (chestToggle) {
+  chestToggle.addEventListener("click", () => {
+    chestPanel.hidden = !chestPanel.hidden;
+  });
+}
+function renderChest(contents) {
+  lastChest = contents || {};
+  const total = Object.values(lastChest).reduce((a, b) => a + b, 0);
+  if (chestBadge) chestBadge.textContent = String(total);
+  if (chestItems) {
+    const rows = Object.entries(lastChest).sort((a, b) => b[1] - a[1]);
+    chestItems.innerHTML = rows.length
+      ? rows
+          .map(
+            ([name, n]) =>
+              `<div class="chest-row"><span class="chest-name">${name.replaceAll("_", " ")}</span><span class="chest-count">×${n}</span></div>`,
+          )
+          .join("")
+      : "<div class=\"chest-row\">empty</div>";
+  }
+}
+
 // ─── render ──────────────────────────────────────────────────────────────────
 function setStatus(s) { statusEl.textContent = s; }
 
@@ -234,6 +297,8 @@ async function bootPodAndPushRelay() {
           appendBotLog(msg.bot, `<span class="err">  ✗</span> <span class="args">${escapeHtml(msg.error || "")}</span>`);
         }
         setBotNow(msg.bot, "idle");
+      } else if (msg.event === "chest_state") {
+        renderChest(msg.contents);
       }
     },
   });

@@ -270,10 +270,12 @@ body[data-mode="main"] header {
   border-radius: 4px;
 }
 
-/* New main layout: big overview on the left (60%), 2x2 bot tiles on the right */
+/* Main layout: overview (left) + 2x2 bot tiles (right). Bot tiles get
+   slightly more room than the overview since individual POVs are where the
+   audience reads bot state + reasoning from. */
 .main-layout {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1fr 1.2fr;
   gap: 8px;
   padding: 8px;
   min-height: 0;
@@ -371,6 +373,17 @@ body[data-mode="main"] header {
   border: none;
   background: #000;
   display: block;
+}
+/* Color-tinted frame around each POV iframe matching the bot's name color,
+   so judges can match a POV to a bot at a glance. */
+.bot-tile-viewer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 3px solid var(--bot-color, transparent);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--bot-color, transparent) 35%, transparent);
+  z-index: 2;
 }
 /* Floating thought bubble overlaid on the viewer */
 .bot-tile-thought {
@@ -540,3 +553,96 @@ body[data-mode="phone"] {
 }
 .chat-form button:hover { background: #4dd4be; }
 .chat-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Header cluster (run-team button, chest toggle, QR/join) ─────────────── */
+.header-cluster {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.team-demo-btn {
+  background: linear-gradient(180deg, #5eead4, #14b8a6);
+  color: #061a17;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 14px rgba(94, 234, 212, 0.25);
+  transition: transform 80ms ease, filter 120ms ease;
+}
+.team-demo-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.team-demo-btn:active { transform: translateY(0); }
+.team-demo-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.chest-toggle {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chest-toggle:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+#chest-badge {
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 100px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Floating panel that drops down when 🎁 is clicked */
+.chest-panel {
+  position: absolute;
+  top: 88px;
+  right: 24px;
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  z-index: 30;
+}
+.chest-panel-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.chest-panel-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.chest-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.chest-row:nth-child(odd) { background: rgba(255,255,255,0.03); }
+.chest-name { color: var(--text); }
+.chest-count {
+  font-family: "SF Mono", Menlo, monospace;
+  color: var(--accent);
+  font-weight: 700;
+}

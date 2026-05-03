@@ -1,4 +1,27 @@
 // Pocketcraft — orchestrator (single-process, multi-agent, no TCP loopback).
+
+// Load .env from repo root (ANTHROPIC_API_KEY for the team orchestrator).
+(() => {
+  const fs = require("fs");
+  const path = require("path");
+  for (const p of [
+    path.resolve(__dirname, "..", "..", ".env"),
+    path.resolve(__dirname, ".env"),
+  ]) {
+    try {
+      const txt = fs.readFileSync(p, "utf8");
+      for (const line of txt.split("\n")) {
+        const m = line.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
+        if (m && process.env[m[1]] === undefined) {
+          process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+        }
+      }
+    } catch {
+      // file missing is fine
+    }
+  }
+})();
+
 //
 // Boots a single Node process that hosts:
 //   • flying-squid Minecraft server
@@ -93,12 +116,16 @@ async function main() {
   }
 
   // ── Seed the world AFTER bots have joined (so chunks are loaded) ──
-  // Seed relative to the FIRST bot's position so structures are visible.
+  // Pin to a FIXED world center (instead of bots[0].entity.position) so
+  // the base location is reproducible and bots can be TP'd to a known
+  // safe spot regardless of where flying-squid randomly spawned them.
+  const { Vec3 } = require("vec3");
+  const WORLD_CENTER = new Vec3(0, 64, 0);
   await new Promise((r) => setTimeout(r, 1500));
   const { seedWorld } = require("./worldSetup");
   let seedPositions;
   try {
-    seedPositions = await seedWorld(server, MC_VERSION, bots[0].bot.entity.position);
+    seedPositions = await seedWorld(server, MC_VERSION, WORLD_CENTER);
     log("world", `basePlaza=${seedPositions.basePlaza}`);
     log("world", `craftingTable=${seedPositions.craftingTable}`);
     log("world", `sharedChest=${seedPositions.sharedChest}`);
@@ -116,26 +143,34 @@ async function main() {
       { dx:  2, dz: -2 },
       { dx: -2, dz: -2 },
     ];
-    for (let i = 0; i < bots.length; i++) {
-      const off = tpOffsets[i % tpOffsets.length];
-      const tx = base.x + off.dx;
-      const tz = base.z + off.dz;
-      const ty = base.y + 1; // one above the grass cap
-      try {
-        const player = server.players.find((p) => p.username === bots[i].name);
-        const { Vec3 } = require("vec3");
-        const tpVec = new Vec3(tx, ty, tz);
-        if (player && typeof player.sendSelfPosition === "function") {
-          player.position = tpVec;
-          player.sendSelfPosition(tpVec);
+    // TP each bot in three waves spread across 3 seconds. flying-squid's
+    // spawn handshake intermittently swallows the first position packet;
+    // repeating the TP guarantees every bot ends up at base.
+    const tpOnce = async (label) => {
+      for (let i = 0; i < bots.length; i++) {
+        const off = tpOffsets[i % tpOffsets.length];
+        const tx = base.x + off.dx;
+        const tz = base.z + off.dz;
+        const ty = base.y + 1;
+        try {
+          const player = server.players.find((p) => p.username === bots[i].name);
+          const tpVec = new Vec3(tx, ty, tz);
+          if (player && typeof player.sendSelfPosition === "function") {
+            player.position = tpVec;
+            player.sendSelfPosition(tpVec);
+          }
+          bots[i].bot.entity.position.set(tx, ty, tz);
+          log("world", `tp[${label}] ${bots[i].name} → (${tx}, ${ty}, ${tz})`);
+        } catch (e) {
+          log("world-err", `tp ${bots[i].name}: ${e.message}`);
         }
-        // Also force-update the mineflayer-side view
-        bots[i].bot.entity.position.set(tx, ty, tz);
-        log("world", `tp ${bots[i].name} → (${tx}, ${ty}, ${tz})`);
-      } catch (e) {
-        log("world-err", `tp ${bots[i].name}: ${e.message}`);
       }
-    }
+    };
+    await tpOnce("1");
+    await new Promise((r) => setTimeout(r, 800));
+    await tpOnce("2");
+    await new Promise((r) => setTimeout(r, 1500));
+    await tpOnce("3");
   } catch (e) {
     log("world-err", e.stack || e.message);
   }
@@ -165,8 +200,14 @@ async function main() {
     }
 
     // Overview viewer: third-person orbit around bots[0]. Judges can drag
-    // to spin/zoom; covers the whole scene from up high.
-    mfViewer(bots[0].bot, { port: OVERVIEW_PORT, firstPerson: false });
+    // to spin/zoom; covers the whole scene from up high. includeSelf=true
+    // forces Alice's own entity to render so all 4 bots appear tinted in
+    // the overview (without it, the camera-target's entity is hidden).
+    mfViewer(bots[0].bot, {
+      port: OVERVIEW_PORT,
+      firstPerson: false,
+      includeSelf: true,
+    });
     log("viewer", `OVERVIEW (third-person, orbit) on :${OVERVIEW_PORT}`);
   } catch (e) {
     log("viewer-err", e.stack || e.message);
@@ -178,6 +219,7 @@ async function main() {
   try {
     const { CommandServer } = require("./commands");
     const { startRelayBridge } = require("./relayBridge");
+    const { runTeam } = require("./teamOrchestrator");
 
     // The TV screen POSTs the pod's relay URL once the pod portal fires.
     // We track the live bridge here so we can replace it on subsequent
@@ -191,8 +233,10 @@ async function main() {
       }
       activeBridge = startRelayBridge({ relayUrl: url, cmdServer: cmd, log });
     };
+    const onTeamPrompt = (prompt) =>
+      runTeam({ prompt, bots, cmdServer: cmd, log });
 
-    cmd = new CommandServer({ port: 3008, log, onRelayUrl });
+    cmd = new CommandServer({ port: 3008, log, onRelayUrl, onTeamPrompt });
     for (const { name, tools, viewerPort } of bots) {
       cmd.registerBot(name, tools, viewerPort);
     }

@@ -40,51 +40,85 @@ async function seedWorld(server, mcVersion, center) {
     await server.setBlock(overworld, pos, stateId);
   }
 
-  // ── 1. Base plaza: find flat-ish ground, clear a 3x3 pad, place crafting + chest ──
-  // Search a ring of candidate spots near spawn for a place where the surface
-  // is relatively flat (adjacent surface heights within 1 block).
-  const candidates = [];
-  for (let r = 3; r <= 6; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dz = -r; dz <= r; dz++) {
-        if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue; // ring only
-        candidates.push({ x: cx + dx, z: cz + dz });
+  // ── 1. Base plaza: pick a spot in the natural terrain that's both HIGH
+  // (above surrounding terrain so bots aren't visually buried) AND FLAT
+  // (so they can stand cleanly). Then clear sky above + level a small pad.
+  //
+  // Scan a wide area for the candidate that maximises (heightAboveAvg - localVariance).
+  const SEARCH_R = 14;
+  const scan = [];
+  for (let dx = -SEARCH_R; dx <= SEARCH_R; dx += 2) {
+    for (let dz = -SEARCH_R; dz <= SEARCH_R; dz += 2) {
+      scan.push({ x: cx + dx, z: cz + dz });
+    }
+  }
+  // Get surface ys for all scan points + a few neighbors per candidate
+  const surfaceCache = new Map();
+  const surfAt = async (x, z) => {
+    const k = `${x},${z}`;
+    if (surfaceCache.has(k)) return surfaceCache.get(k);
+    const y = await findSurfaceY(overworld, x, z);
+    surfaceCache.set(k, y);
+    return y;
+  };
+  // Average surface across the whole scan
+  const allYs = await Promise.all(scan.map((p) => surfAt(p.x, p.z)));
+  const avgY = allYs.reduce((a, b) => a + b, 0) / allYs.length;
+
+  let bestPick = null;
+  let bestScore = -Infinity;
+  for (let i = 0; i < scan.length; i++) {
+    const p = scan[i];
+    const center = allYs[i];
+    // Sample a 5x5 neighborhood for local variance + average
+    const neigh = [];
+    for (let nx = -2; nx <= 2; nx++) {
+      for (let nz = -2; nz <= 2; nz++) {
+        neigh.push(await surfAt(p.x + nx, p.z + nz));
+      }
+    }
+    const lo = Math.min(...neigh);
+    const hi = Math.max(...neigh);
+    const variance = hi - lo;
+    if (variance > 2) continue; // require a 5x5 area within 2 blocks vertically
+    const heightAboveAvg = center - avgY;
+    const score = heightAboveAvg * 3 - variance; // bias strongly toward high+flat
+    if (score > bestScore) {
+      bestScore = score;
+      bestPick = { x: p.x, z: p.z, y: center };
+    }
+  }
+  // Fallback if nothing flat enough — just use highest sample
+  if (!bestPick) {
+    let h = -Infinity, hi = 0;
+    for (let i = 0; i < scan.length; i++) if (allYs[i] > h) { h = allYs[i]; hi = i; }
+    bestPick = { x: scan[hi].x, z: scan[hi].z, y: allYs[hi] };
+  }
+
+  const baseX = bestPick.x;
+  const baseZ = bestPick.z;
+  const baseY = bestPick.y;
+
+  // Clear sky above the pad (any overhanging leaves/dirt)
+  for (let dx = -2; dx <= 3; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dy = 1; dy <= 8; dy++) {
+        await set(new Vec3(baseX + dx, baseY + dy, baseZ + dz), "air");
       }
     }
   }
-  let best = null;
-  for (const c of candidates) {
-    const ys = await Promise.all(
-      [[0,0],[1,0],[0,1],[-1,0],[0,-1]].map(([dx,dz]) =>
-        findSurfaceY(overworld, c.x + dx, c.z + dz)
-      )
-    );
-    const range = Math.max(...ys) - Math.min(...ys);
-    if (range <= 1) { best = { ...c, y: ys[0] }; break; }
-    if (!best || range < best.range) best = { ...c, y: ys[0], range };
-  }
-  if (!best) best = { x: cx + 3, z: cz, y: await findSurfaceY(overworld, cx + 3, cz) };
-  const baseY = best.y;
-
-  // Clear canopy above base (in case a tree is in the way)
-  for (let dx = -1; dx <= 2; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      for (let dy = 1; dy <= 6; dy++) {
-        await set(new Vec3(best.x + dx, baseY + dy, best.z + dz), "air");
-      }
-    }
-  }
-  // Flatten pad to grass/dirt
-  for (let dx = -1; dx <= 2; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      await set(new Vec3(best.x + dx, baseY, best.z + dz), "grass_block");
+  // Level the pad to the chosen y, grass cap on top
+  for (let dx = -2; dx <= 3; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      await set(new Vec3(baseX + dx, baseY, baseZ + dz), "grass_block");
     }
   }
 
-  const craftPos = new Vec3(best.x, baseY + 1, best.z);
+  const craftPos = new Vec3(baseX + 2, baseY + 1, baseZ);
   await set(craftPos, "crafting_table");
-  const chestPos = new Vec3(best.x + 2, baseY + 1, best.z);
+  const chestPos = new Vec3(baseX + 3, baseY + 1, baseZ);
   await set(chestPos, "chest");
+  const best = { x: baseX, z: baseZ, y: baseY };
 
   // ── 2. Exposed diamond veins: pick spots ~15-25 blocks in 4 directions ──
   // Drop them ON the surface so findBlock finds them. In real minecraft

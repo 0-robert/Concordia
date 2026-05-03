@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build the phone bundle from pocketcraft/host/ and stage:
+# Build the phone bundle from concordia/host/ and stage:
 #   - bundle into ./public/ (so pod-host serves phone.html on /)
-#   - the entire pod-host/ tree into pocketcraft/host/public/pod-host/ (so the
+#   - the entire pod-host/ tree into concordia/host/public/pod-host/ (so the
 #     host page can fetch them and copy into the BrowserPod sandbox at boot)
 #   - a manifest.json listing every file the host needs to copy into the pod.
 set -euo pipefail

@@ -15,8 +15,8 @@ build/
 # Logs
 *.log
 logs/
-pocketcraft/server/logs/
-pocketcraft/server/null/
+concordia/server/logs/
+concordia/server/null/
 
 # Cache / OS
 .DS_Store
@@ -53,7 +53,7 @@ BrowserPod hackathon.pdf
 /image.png
 /image*.png
 /*.png
-!pocketcraft/**/*.png
+!concordia/**/*.png
 !docs/**/*.png
 
 # Sibling projects not part of the submission
@@ -62,10 +62,10 @@ browserpod-vibe-check/
 browserpod-docs/
 
 # Built bundles that contain baked env vars
-pocketcraft/host/dist/
-pocketcraft/host/public/pod-host/
-pocketcraft/host/public/app/
-pocketcraft/pod-host/public/assets/
+concordia/host/dist/
+concordia/host/public/pod-host/
+concordia/host/public/app/
+concordia/pod-host/public/assets/
 
 # Player data dumps
-pocketcraft/**/null/
+concordia/**/null/

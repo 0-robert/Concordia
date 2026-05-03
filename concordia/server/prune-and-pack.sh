@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Re-install + prune unused MC version data + repack node_modules.
-# Run from pocketcraft/server/.
+# Run from concordia/server/.
 #
 # Why: the unpruned tarball is 106 MB → ~813 MB extracted, which OOMs
 # Chrome (ERR 5) when streaming into BrowserPod's IndexedDB. Pruning

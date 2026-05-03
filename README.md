@@ -298,19 +298,19 @@ Team mode and individual-drive mode use the **same** command bus. The orchestrat
 ```bash
 # 1. Set keys
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-echo "VITE_BP_APIKEY=bp1_..." > pocketcraft/host/.env
-echo "VITE_ANTHROPIC_API_KEY=sk-ant-..." >> pocketcraft/host/.env
+echo "VITE_BP_APIKEY=bp1_..." > concordia/host/.env
+echo "VITE_ANTHROPIC_API_KEY=sk-ant-..." >> concordia/host/.env
 
 # 2. Install
-( cd pocketcraft/server   && npm install )
-( cd pocketcraft/host     && npm install )
-( cd pocketcraft/pod-host && npm install )
+( cd concordia/server   && npm install )
+( cd concordia/host     && npm install )
+( cd concordia/pod-host && npm install )
 
 # 3. Boot the laptop side (MC server + 4 bots + prismarine viewers)
-( cd pocketcraft/server && node index.js ) &
+( cd concordia/server && node index.js ) &
 
 # 4. Boot the host (Vite dev + bundles pod-host into the page)
-( cd pocketcraft/host && npm run dev ) &
+( cd concordia/host && npm run dev ) &
 
 # 5. Open in CHROME (Safari's COEP/SharedArrayBuffer support is incomplete):
 #    http://localhost:5174/main.html
@@ -331,7 +331,7 @@ Then either:
 ## Code map
 
 ```
-pocketcraft/                    ← folder name preserved for git history; project = Concordia
+concordia/                    ← folder name preserved for git history; project = Concordia
 ├── server/                     # Minecraft + agent side (runs on laptop)
 │   ├── index.js                  orchestrator: flying-squid + 4 bots + viewers
 │   ├── bot.js                    makeBot() · duplex pair, mineflayer, tools

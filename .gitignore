@@ -1,2 +1,71 @@
+# Secrets
 .env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+*.tar.gz
+
+# Build artifacts
+dist/
+build/
+.vite/
+
+# Logs
 *.log
+logs/
+pocketcraft/server/logs/
+pocketcraft/server/null/
+
+# Cache / OS
+.DS_Store
+.cache/
+*.swp
+Thumbs.db
+
+# Editor / agent scaffolding (local only)
+.devin/
+.agents/
+.claude/
+.cursor/
+skills-lock.json
+
+# Internal working notes / scratch
+convo.txt
+chatgptconvo.txt
+issue1.txt
+issue2.txt
+issue*.txt
+logs.txt
+nextsteps.txt
+PLAN.md
+TASKS.md
+SPEC.md
+VISION.md
+ARCHITECTURE.md
+
+# Organizer materials (not ours to redistribute)
+ai-in-the-box.pptx.pdf
+BrowserPod hackathon.pdf
+
+# Screenshots / scratch images in repo root
+/image.png
+/image*.png
+/*.png
+!pocketcraft/**/*.png
+!docs/**/*.png
+
+# Sibling projects not part of the submission
+bp-workshop/
+browserpod-vibe-check/
+browserpod-docs/
+
+# Built bundles that contain baked env vars
+pocketcraft/host/dist/
+pocketcraft/host/public/pod-host/
+pocketcraft/host/public/app/
+pocketcraft/pod-host/public/assets/
+
+# Player data dumps
+pocketcraft/**/null/

@@ -116,19 +116,36 @@ async function seedWorld(server, mcVersion, center) {
 
   const craftPos = new Vec3(baseX + 2, baseY + 1, baseZ);
   await set(craftPos, "crafting_table");
+
+  // Shared "chest" — flying-squid's setBlock doesn't initialize the chest's
+  // tile-entity NBT, so prismarine-viewer renders an actual `chest` as
+  // invisible. Use a 1×2 stack of solid blocks instead: glowstone base +
+  // diamond_block top. Glows bright, sparkles, impossible to miss.
   const chestPos = new Vec3(baseX + 3, baseY + 1, baseZ);
-  await set(chestPos, "chest");
+  await set(chestPos, "glowstone");
+  await set(chestPos.offset(0, 1, 0), "diamond_block");
+  // Four torches around it for extra visibility (and pretty light)
+  for (const off of [
+    [-1, 0, 0],
+    [1, 0, 0],
+    [0, 0, -1],
+    [0, 0, 1],
+  ]) {
+    const tp = chestPos.offset(...off);
+    await set(tp, "torch");
+  }
   const best = { x: baseX, z: baseZ, y: baseY };
 
-  // ── 2. Exposed diamond veins: pick spots ~15-25 blocks in 4 directions ──
-  // Drop them ON the surface so findBlock finds them. In real minecraft
-  // diamonds are buried, but for the demo we want visible "go-get-that" spots.
+  // ── 2. Exposed diamond veins: ONE per compass direction so the team
+  // demo's directional role-assignment has unambiguous targets. Each is
+  // ~22 blocks from world center; placement matches TEAM_ROLE in
+  // teamOrchestrator.js (Alice=East, Bob=West, Carl=South, Dana=North).
   const veinOffsets = [
-    { dx:  18, dz:   5 }, // east
-    { dx: -15, dz:  12 }, // west
-    { dx:   8, dz: -18 }, // south
-    { dx: -12, dz: -14 }, // south-west
-    { dx:  22, dz: -10 }, // east-south
+    { dx:  22, dz:   2 }, // EAST   → Alice
+    { dx: -22, dz:  -2 }, // WEST   → Bob
+    { dx:   2, dz: -22 }, // SOUTH  → Carl
+    { dx:  -2, dz:  22 }, // NORTH  → Dana
+    { dx:  16, dz:  16 }, // NE bonus (in case anyone needs a second vein)
   ];
   const diamondSpots = [];
   for (const off of veinOffsets) {

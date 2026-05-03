@@ -20,7 +20,7 @@ import {
 const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
-const POD_HOST_DIR = join(REPO_ROOT, "pocketcraft", "pod-host");
+const POD_HOST_DIR = join(REPO_ROOT, "concordia", "pod-host");
 const PORT = 4001;
 const BASE = `http://127.0.0.1:${PORT}`;
 const WS_BASE = `ws://127.0.0.1:${PORT}`;
@@ -111,7 +111,7 @@ try {
   const idxResp = await fetch(BASE + "/");
   const idxHtml = await idxResp.text();
   assert(idxResp.status === 200, "GET / → 200");
-  assert(idxHtml.includes("Pocketcraft"), "  index has 'Pocketcraft' title");
+  assert(idxHtml.includes("Concordia"), "  index has 'Concordia' title");
   assert(idxHtml.match(/\/assets\/phone-[\w]+\.js/), "  references /assets/phone-*.js");
   // Spot-check the JS bundle contains the relative-URL strings
   const jsMatch = idxHtml.match(/\/assets\/phone-[\w]+\.js/);

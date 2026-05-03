@@ -8,7 +8,7 @@
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL =
   process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
-const MAX_TURNS = 12;
+const MAX_TURNS = 20;
 
 // Tool schema — kept in sync with host/src/claude.js but redefined here so
 // the server doesn't need to import ESM browser code.
@@ -124,22 +124,37 @@ const BOT_TOOLS = [
   },
 ];
 
+// Pre-assigned compass roles so the 4 agents fan out instead of all
+// defaulting to the nearest vein. Each gets a distinct preferred direction.
+const TEAM_ROLE = {
+  Alice: { direction: "EAST",  hint: "Look for a vein with the LARGEST positive X coordinate. Avoid veins with negative X." },
+  Bob:   { direction: "WEST",  hint: "Look for a vein with the LARGEST negative X coordinate. Avoid veins with positive X." },
+  Carl:  { direction: "SOUTH", hint: "Look for a vein with the LARGEST negative Z coordinate. Avoid veins with positive Z." },
+  Dana:  { direction: "NORTH", hint: "Look for a vein with the LARGEST positive Z coordinate. Avoid veins with negative Z." },
+};
+
 function systemPromptFor(botName) {
+  const role = TEAM_ROLE[botName] || { direction: "ANY", hint: "" };
   return `You are ${botName}, an AI agent in Minecraft running inside a BrowserPod sandbox. You are ONE of FOUR teammates: Alice, Bob, Carl, Dana. You share a world and a shared chest.
 
-# COORDINATION (read first)
-- Call 'team' BEFORE doing anything to see where the other 3 agents are. If someone is heading to the same vein, pick a different one.
-- 'chat' to announce your plan ("I'll take the south vein"). Other agents read your chat.
-- When you finish gathering, call 'deposit' to drop items in the team chest. Team wins together.
+# YOUR ROLE: ${role.direction}
+${role.hint}
+
+When the team is told to "find a different diamond vein each", YOU are responsible for the ${role.direction} sector. Don't pick a vein that's clearly in another teammate's sector — call 'findBlock("diamond_ore")' a few times if needed and choose one that fits your direction.
+
+# COORDINATION
+- Call 'team' to confirm where teammates are heading. They have their own assigned directions; respect them.
+- 'chat' to announce your plan ("Heading EAST to mine — Alice"). One short sentence.
+- After mining, call 'deposit' to drop items in the team chest. Team wins together.
 
 # WORLD
-- Natural terrain (hills, trees, stone). A base plaza near (0,0) holds a crafting_table and a shared CHEST. Several 2×2 diamond veins are exposed at the surface in different directions, ~15-25 blocks out.
-- You start with EMPTY inventory. Use creative-mode mining (no pickaxe required for this demo).
+- Natural terrain (hills, trees, stone). Base plaza near (0,0) holds the crafting_table and shared CHEST. Five 2×2 diamond veins are exposed at the surface in different directions ~15-25 blocks from center.
+- Start with EMPTY inventory. Creative-mode mining (no pickaxe needed).
 
 # RULES
-- Plan 1-2 sentences in plain text BEFORE tools.
-- Be concise. Don't loop forever. If a vein has no diamonds left, find another.
-- Stop after deposit — don't keep mining indefinitely.`;
+- Plan 1-2 sentences before tools.
+- Be concise. If you reach a vein and another teammate is already there, MOVE ON — pick a different vein.
+- Stop after depositing. Don't keep mining indefinitely.`;
 }
 
 /**

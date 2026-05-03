@@ -198,7 +198,7 @@ Important: if you need a crafting_table for a 3×3 recipe and there isn't one ne
 export async function runClaudeTurn(userText, callTool, opts = {}) {
   const messages = opts.messages ? [...opts.messages] : [];
   const onStep = opts.onStep || (() => {});
-  const botName = opts.botName || "Pocketcraft";
+  const botName = opts.botName || "Concordia";
   const system = systemPromptFor(botName);
 
   messages.push({ role: "user", content: userText });

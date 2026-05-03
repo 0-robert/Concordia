@@ -15,7 +15,7 @@ import {
 const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
-const POD_HOST_DIR = join(REPO_ROOT, "pocketcraft", "pod-host");
+const POD_HOST_DIR = join(REPO_ROOT, "concordia", "pod-host");
 
 const POD_PORT = 4002;
 const LAPTOP_PORT = 4003; // stand-in for laptop's :3008

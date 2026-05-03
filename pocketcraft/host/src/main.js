@@ -1,4 +1,4 @@
-// Pocketcraft host page.
+// Concordia host page.
 //
 // Boots a BrowserPod inside this tab, runs the MC server in it, then wires
 // the in-pod viewer + command WS to the UI. User input → Claude → tool-use
@@ -13,7 +13,7 @@ const params = new URLSearchParams(location.search);
 const LOCAL_MODE = params.get("local") === "1";
 const BOT_NAME = params.get("bot") || "Alice"; // Alice or Bob
 
-document.title = `Pocketcraft — ${BOT_NAME}`;
+document.title = `Concordia — ${BOT_NAME}`;
 document.body.setAttribute("data-bot", BOT_NAME);
 if (LOCAL_MODE) document.body.setAttribute("data-mode", "local");
 

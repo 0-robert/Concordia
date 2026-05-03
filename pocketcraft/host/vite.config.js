@@ -22,12 +22,24 @@ export default defineConfig({
   server: {
     host: "0.0.0.0", // accessible to phones on LAN
     port: 5174,
+    // Allow ngrok-served hosts to access the dev server (Vite blocks
+    // unfamiliar Host headers by default).
+    allowedHosts: true,
     headers: {
       // `credentialless` instead of `require-corp` — still cross-origin
       // isolated (SharedArrayBuffer works) but allows embedding iframes
       // (like localhost:3007 prismarine-viewer) that don't send CORP headers.
       "Cross-Origin-Embedder-Policy": "credentialless",
       "Cross-Origin-Opener-Policy": "same-origin",
+    },
+    // Proxy laptop services through Vite so a single ngrok tunnel of :5174
+    // exposes everything. Endpoints used by main-screen.js / phone.js when
+    // ?proxy=1 is set (or by default when running through ngrok).
+    proxy: {
+      "/api/bots":        { target: "http://localhost:3008", changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, "") },
+      "/api/relay-url":   { target: "http://localhost:3008", changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, "") },
+      "/api/team-prompt": { target: "http://localhost:3008", changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, "") },
+      "/ws-cmd":          { target: "ws://localhost:3008", ws: true, rewrite: () => "/" },
     },
   },
   plugins: [

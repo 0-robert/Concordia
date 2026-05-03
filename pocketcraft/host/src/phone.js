@@ -1,4 +1,4 @@
-// Pocketcraft phone control.
+// Concordia phone control.
 //
 // One judge per phone. Each phone is bound to one bot via ?bot=<name>.
 // If no bot is given, show a picker.

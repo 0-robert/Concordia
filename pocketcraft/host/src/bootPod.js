@@ -48,7 +48,7 @@ export async function bootPod({ terminalEl, anthropicKey, log = () => {} } = {})
   // Bump this when changing pod-host structure to bypass corrupt IndexedDB
   // (BrowserPod uses storageKey to identify the persisted disk image).
   const params = new URLSearchParams(location.search);
-  const storageKey = params.get("storage") || "pocketcraft-podhost-v1";
+  const storageKey = params.get("storage") || "concordia-podhost-v1";
 
   log("[boot] BrowserPod.boot()");
   const pod = await BrowserPod.boot({

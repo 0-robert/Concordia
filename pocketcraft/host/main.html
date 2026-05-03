@@ -3,23 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pocketcraft — main screen</title>
+    <title>Concordia — main screen</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body data-mode="main">
     <header>
       <h1>
-        Pocketcraft
+        Concordia
         <span class="tag">AI in the Box</span>
         <span id="status" class="status">connecting…</span>
       </h1>
       <div class="header-cluster">
-        <button id="run-team-demo" class="team-demo-btn" title="Hardcoded multi-agent demo">
-          🚀 RUN TEAM DEMO
-        </button>
-        <button id="chest-toggle" class="chest-toggle" title="Click to view shared chest">
-          🎁 <span id="chest-badge">0</span>
-        </button>
+        <form id="team-form" class="team-form" autocomplete="off" hidden>
+          <label for="team-input" class="team-label">TEAM GOAL</label>
+          <input
+            id="team-input"
+            type="text"
+            placeholder="e.g. mine all the diamonds you can find"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="team-submit" type="submit" class="team-demo-btn">
+            🚀 RUN
+          </button>
+        </form>
         <div id="join-info" class="join-info">
           <div class="join-text">
             <div class="join-cta">📱 Scan to control a bot</div>
@@ -29,10 +36,6 @@
         </div>
       </div>
     </header>
-    <div id="chest-panel" class="chest-panel" hidden>
-      <div class="chest-panel-title">SHARED CHEST</div>
-      <div class="chest-panel-items" id="chest-items">empty</div>
-    </div>
 
     <main class="main-layout">
       <section class="overview-pane">
@@ -45,6 +48,26 @@
           credentialless
           allow="cross-origin-isolated"
         ></iframe>
+
+        <!-- Floating stockpile button + panel, anchored to top-right of overview -->
+        <button
+          id="chest-toggle"
+          class="chest-overlay-btn"
+          title="Shared team stockpile"
+          aria-label="Shared team stockpile"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3"  y="14" width="8"  height="6" rx="1"></rect>
+            <rect x="13" y="14" width="8"  height="6" rx="1"></rect>
+            <rect x="8"  y="8"  width="8"  height="6" rx="1"></rect>
+            <rect x="6"  y="2"  width="12" height="6" rx="1"></rect>
+          </svg>
+          <span id="chest-badge">0</span>
+        </button>
+        <div id="chest-panel" class="chest-panel" hidden>
+          <div class="chest-panel-title">SHARED STOCKPILE</div>
+          <div class="chest-panel-items" id="chest-items">empty</div>
+        </div>
       </section>
       <section class="bots-grid" id="main-grid">
         <!-- bot tiles get inserted here -->

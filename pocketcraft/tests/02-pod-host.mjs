@@ -11,7 +11,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
-const POD_HOST_DIR = join(REPO_ROOT, "pocketcraft", "pod-host");
+const POD_HOST_DIR = join(REPO_ROOT, "concordia", "pod-host");
 const PORT = 4000;
 const BASE = `http://127.0.0.1:${PORT}`;
 const WS_BASE = `ws://127.0.0.1:${PORT}`;

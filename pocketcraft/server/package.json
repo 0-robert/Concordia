@@ -1,5 +1,5 @@
 {
-  "name": "pocketcraft-server",
+  "name": "concordia-server",
   "version": "0.0.1",
   "description": "MC server + LLM-controlled bot, single Node process, pod-deployable",
   "type": "commonjs",

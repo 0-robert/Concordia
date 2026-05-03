@@ -1,4 +1,4 @@
-// Pocketcraft Claude proxy.
+// Concordia Claude proxy.
 //
 // Thin HTTP proxy in front of the Anthropic API. Holds the API key
 // server-side so the host page (and eventually the deployed demo) never

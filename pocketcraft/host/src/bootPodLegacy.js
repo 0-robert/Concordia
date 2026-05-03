@@ -80,7 +80,7 @@ export async function bootPod({ terminalEl, log = () => {} } = {}) {
   // mismatch` / corrupted-IndexedDB error to abandon the poisoned store.
   // URL `?storage=fresh-<x>` forces a one-off fresh disk.
   const params = new URLSearchParams(location.search);
-  const storageKey = params.get("storage") || "pocketcraft-v2-clean";
+  const storageKey = params.get("storage") || "concordia-v2-clean";
 
   const pod = await BrowserPod.boot({
     apiKey: import.meta.env.VITE_BP_APIKEY,

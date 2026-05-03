@@ -1,4 +1,4 @@
-// Pocketcraft — orchestrator (single-process, multi-agent, no TCP loopback).
+// Concordia — orchestrator (single-process, multi-agent, no TCP loopback).
 
 // Load .env from repo root (ANTHROPIC_API_KEY for the team orchestrator).
 (() => {
@@ -53,7 +53,7 @@ async function main() {
   const HOST = "127.0.0.1";
 
   const server = createMCServer({
-    motd: "Pocketcraft",
+    motd: "Concordia",
     "max-players": 4,
     port: PORT,
     host: HOST,
@@ -269,8 +269,8 @@ async function main() {
 
     // Boot-time fallback: env var works the same as POST /relay-url, useful
     // for headless / scripted runs.
-    if (process.env.POCKETCRAFT_RELAY_URL) {
-      onRelayUrl(process.env.POCKETCRAFT_RELAY_URL);
+    if (process.env.CONCORDIA_RELAY_URL) {
+      onRelayUrl(process.env.CONCORDIA_RELAY_URL);
     }
 
     // Forward in-game chat from any bot back to UI

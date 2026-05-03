@@ -1,1 +1,1 @@
-{ "name": "pocketcraft-tests", "private": true, "type": "module", "dependencies": { "ws": "^8.18.0" } }
+{ "name": "concordia-tests", "private": true, "type": "module", "dependencies": { "ws": "^8.18.0" } }

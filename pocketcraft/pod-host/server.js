@@ -1,4 +1,4 @@
-// Pocketcraft pod-host.
+// Concordia pod-host.
 //
 // Runs inside the BrowserPod sandbox (or on laptop for testing). Three jobs:
 //

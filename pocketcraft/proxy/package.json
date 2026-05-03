@@ -1,5 +1,5 @@
 {
-  "name": "pocketcraft-proxy",
+  "name": "concordia-proxy",
   "version": "0.0.1",
   "description": "Tiny Anthropic proxy — keeps the API key server-side so the host page can call Claude without leaking it.",
   "type": "commonjs",

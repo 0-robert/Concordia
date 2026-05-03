@@ -1,4 +1,4 @@
-// Pocketcraft main screen.
+// Concordia main screen.
 //
 // Shows a tiled grid of first-person bot views, plus a QR code that
 // audience members scan to open /phone.html?bot=<name> on their device.
@@ -10,11 +10,23 @@ import { makeClient } from "./wsClient.js";
 import { bootPod } from "./bootPod.js";
 
 const params = new URLSearchParams(location.search);
-// Where the MC server lives. ?host=192.168.1.5:3008 lets you point at a
-// different machine (useful when phones connect over LAN).
-const SERVER_HOST = params.get("host") || `${location.hostname}:3008`;
-const HTTP_BASE = `http://${SERVER_HOST}`;
-const WS_URL = `ws://${SERVER_HOST}`;
+// When the page is served from localhost / a private LAN IP, talk to the
+// laptop's :3008 directly. When served from ngrok / any public host, route
+// laptop traffic through the Vite proxy (/api/* and /ws-cmd) so a single
+// public tunnel exposes everything.
+const _h = location.hostname;
+const _isLocal =
+  _h === "localhost" ||
+  _h === "127.0.0.1" ||
+  /^192\.168\./.test(_h) ||
+  /^10\./.test(_h) ||
+  /^172\.(1[6-9]|2[0-9]|3[01])\./.test(_h);
+const _hostOverride = params.get("host"); // explicit override still wins
+const SERVER_HOST = _hostOverride || (_isLocal ? `${_h}:3008` : null);
+const HTTP_BASE = SERVER_HOST ? `http://${SERVER_HOST}` : "/api";
+const WS_URL = SERVER_HOST
+  ? `ws://${SERVER_HOST}`
+  : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws-cmd`;
 
 // ?nopod=1 → skip pod boot, QR points at laptop's phone.html (legacy).
 // ?phone=https://x/phone.html → explicit override.
@@ -33,12 +45,29 @@ const qrCanvas = $("qr");
 const CANNED_TEAM_PROMPT =
   "Each of you find a different diamond_ore vein and bring all the diamonds back to the shared team chest. Call the team tool first to coordinate — DON'T duplicate efforts. Pick a unique direction, mine, then deposit. Stop after depositing.";
 
-const teamBtn = $("run-team-demo");
-if (teamBtn) {
-  teamBtn.addEventListener("click", async () => {
-    teamBtn.disabled = true;
-    const oldText = teamBtn.textContent;
-    teamBtn.textContent = "▶ running…";
+// The TEAM GOAL textbox is theatrical — the presenter types *anything*
+// (e.g., "mine all the diamonds") and on submit we send the pre-tested
+// CANNED_TEAM_PROMPT to the backend. Hidden by default so judges who
+// click the submission URL after the demo can't fiddle with it; reveal
+// with ?presenter=1.
+const PRESENTER_MODE = params.get("presenter") === "1";
+const teamForm = $("team-form");
+const teamInput = $("team-input");
+const teamBtn = $("team-submit");
+if (teamForm && PRESENTER_MODE) teamForm.hidden = false;
+if (teamForm) {
+  teamForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const typed = (teamInput?.value || "").trim();
+    const displayed = typed || "mine diamonds for the team";
+    if (teamBtn) {
+      teamBtn.disabled = true;
+      teamBtn.textContent = "▶ running…";
+    }
+    // Use the typed text as the visible team-goal banner (so judges see
+    // what was "asked"), but fire the canned prompt to the backend.
+    // Broadcast a fake user_input so the TV shows the typed goal.
+    setStatus(`TEAM GOAL: ${displayed}`);
     try {
       const r = await fetch(`${HTTP_BASE}/team-prompt`, {
         method: "POST",
@@ -49,14 +78,15 @@ if (teamBtn) {
         const t = await r.text();
         throw new Error(`HTTP ${r.status}: ${t}`);
       }
-    } catch (e) {
-      alert("Team demo failed: " + e.message);
-      console.error(e);
+    } catch (err) {
+      alert("Team demo failed: " + err.message);
+      console.error(err);
     } finally {
-      // Re-enable after a beat — the prompt continues running in the bg.
       setTimeout(() => {
-        teamBtn.disabled = false;
-        teamBtn.textContent = oldText;
+        if (teamBtn) {
+          teamBtn.disabled = false;
+          teamBtn.textContent = "🚀 RUN";
+        }
       }, 3000);
     }
   });
@@ -70,8 +100,19 @@ const chestItems = $("chest-items");
 let lastChest = {};
 
 if (chestToggle) {
-  chestToggle.addEventListener("click", () => {
-    chestPanel.hidden = !chestPanel.hidden;
+  chestToggle.setAttribute("aria-expanded", "false");
+  chestToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = chestPanel.hidden;
+    chestPanel.hidden = !willOpen;
+    chestToggle.setAttribute("aria-expanded", String(willOpen));
+  });
+  // Click outside the panel/button closes it
+  document.addEventListener("click", (e) => {
+    if (chestPanel.hidden) return;
+    if (chestPanel.contains(e.target) || chestToggle.contains(e.target)) return;
+    chestPanel.hidden = true;
+    chestToggle.setAttribute("aria-expanded", "false");
   });
 }
 function renderChest(contents) {
@@ -103,7 +144,7 @@ async function loadBotList() {
 }
 
 // One color per bot for visual distinction in tiles + logs
-const BOT_COLORS = ["#4ade80", "#60a5fa", "#fbbf24", "#f472b6"]; // Alice green, Bob blue, Carl amber, Dana pink
+const BOT_COLORS = ["#1f7a4a", "#2f74d8", "#c98a2b", "#c14b8b"]; // Alice green, Bob blue, Carl amber, Dana pink (incident.io-tuned)
 
 function renderTiles(bots) {
   // Auto-grid: 1 bot full, 2 side-by-side, 3-4 in 2x2
@@ -116,8 +157,12 @@ function renderTiles(bots) {
     tile.dataset.bot = b.name;
     tile.style.setProperty("--bot-color", BOT_COLORS[i % BOT_COLORS.length]);
 
-    const viewerHost = SERVER_HOST.split(":")[0];
-    const viewerUrl = `http://${viewerHost}:${b.viewerPort}`;
+    // When running locally we iframe the laptop's prismarine-viewer directly.
+    // When running via ngrok (SERVER_HOST is null because we proxy through
+    // /api/* + /ws-cmd), the viewer ports aren't exposed — leave the iframe
+    // src empty so it renders a solid black tile with the header/log, no crash.
+    const viewerHost = SERVER_HOST ? SERVER_HOST.split(":")[0] : null;
+    const viewerUrl = viewerHost ? `http://${viewerHost}:${b.viewerPort}` : "";
 
     tile.innerHTML = `
       <div class="bot-tile-header">
@@ -148,7 +193,8 @@ function appendBotLog(botName, html, cls = "") {
   div.innerHTML = html;
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
-  while (el.children.length > 6) el.removeChild(el.firstChild);
+  // Tile only shows 1 line collapsed / ~4 lines expanded — keep history short.
+  while (el.children.length > 5) el.removeChild(el.firstChild);
 }
 function setBotNow(botName, text) {
   const el = document.getElementById(`bot-now-${botName}`);
@@ -160,9 +206,11 @@ function setBotThought(botName, text, kind = "thought") {
   el.textContent = text;
   el.dataset.kind = kind; // user | thought
   el.classList.remove("fade");
-  // fade out after 30s of no updates
+  // Fade out faster so the bubble doesn't sit on the iframe forever.
+  // User chats stick around a bit longer than passing thoughts.
   clearTimeout(el._fadeTimer);
-  el._fadeTimer = setTimeout(() => el.classList.add("fade"), 30_000);
+  const ttl = kind === "user" ? 12_000 : 7_000;
+  el._fadeTimer = setTimeout(() => el.classList.add("fade"), ttl);
 }
 
 function formatArgs(args) {
@@ -214,9 +262,14 @@ async function bootPodAndPushRelay() {
   }
   setStatus("booting pod…");
 
+  // Anthropic key is only bundled in presenter builds (VITE_ANTHROPIC_API_KEY
+  // in host/.env). Public submission builds omit it deliberately so the URL
+  // can't burn the presenter's Anthropic credits. Missing key = skip pod
+  // boot; the page still renders, QR falls back to the laptop URL.
   const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
   if (!anthropicKey) {
-    throw new Error("VITE_ANTHROPIC_API_KEY missing in host/.env");
+    setStatus("demo mode · live at 15:30 (GitHub repo for details)");
+    throw new Error("demo-mode: key omitted for public submission build");
   }
 
   const { portalUrl, podWsUrl } = await bootPod({
@@ -252,8 +305,10 @@ async function bootPodAndPushRelay() {
   const bots = payload.bots;
   renderTiles(bots);
 
-  // Wire the overview iframe (left half)
-  if (payload.overviewPort) {
+  // Wire the overview iframe — only when running locally (see note in
+  // renderTiles above). In ngrok mode the viewer port isn't exposed so we
+  // skip the iframe src entirely and let the tile render as solid black.
+  if (payload.overviewPort && SERVER_HOST) {
     const viewerHost = SERVER_HOST.split(":")[0];
     document.getElementById("overview").src = `http://${viewerHost}:${payload.overviewPort}`;
   }
@@ -283,7 +338,9 @@ async function bootPodAndPushRelay() {
     onDisconnect: () => setStatus("disconnected — retrying"),
     onEvent: (msg) => {
       if (msg.event === "user_input") {
-        setBotThought(msg.bot, `🗣 ${msg.text}`, "user");
+        // Don't flash the user's own message into the bot's thought
+        // bubble — it's the bot's thoughts that belong there. The log
+        // strip below still records the prompt for context.
         appendBotLog(msg.bot, `<span class="user">🗣 ${escapeHtml(msg.text)}</span>`);
       } else if (msg.event === "thought") {
         setBotThought(msg.bot, msg.text, "thought");

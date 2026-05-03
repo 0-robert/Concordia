@@ -101,7 +101,7 @@ const BOT_TOOLS = [
   },
 ];
 
-const SYSTEM = `You are Pocketcraft, an AI agent embodied in a Minecraft bot running inside a BrowserPod browser tab.
+const SYSTEM = `You are Concordia, an AI agent embodied in a Minecraft bot running inside a BrowserPod browser tab.
 
 Rules:
 - Be concise. Narrate what you're doing (1 short sentence) using the 'chat' tool before major actions.

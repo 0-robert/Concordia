@@ -293,38 +293,138 @@ Team mode and individual-drive mode use the **same** command bus. The orchestrat
 
 ## Run it locally
 
-**Prereqs:** Node 22+, an Anthropic API key, a BrowserPod API key (free tier).
+### Prerequisites
+
+| Requirement | Why |
+|---|---|
+| **Node 22+** | Matches the BrowserPod runtime; `flying-squid` + `prismarine-viewer` need a modern Node |
+| **Chrome** (not Safari) | SharedArrayBuffer + COEP `credentialless` support; Safari's cross-origin-isolation is incomplete |
+| **Anthropic API key** | Drives the four Claude agent loops. Free tier is enough for a ~30 min demo |
+| **BrowserPod API key** | Free tier at [browserpod.io](https://browserpod.io). Needed for the pod boot |
+
+### 1. Clone and set keys
 
 ```bash
-# 1. Set keys
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-echo "VITE_BP_APIKEY=bp1_..." > concordia/host/.env
-echo "VITE_ANTHROPIC_API_KEY=sk-ant-..." >> concordia/host/.env
+git clone <this-repo> concordia
+cd concordia
 
-# 2. Install
-( cd concordia/server   && npm install )
-( cd concordia/host     && npm install )
-( cd concordia/pod-host && npm install )
+# Server-side: team orchestrator reads this
+cat > .env <<EOF
+ANTHROPIC_API_KEY=sk-ant-...
+EOF
 
-# 3. Boot the laptop side (MC server + 4 bots + prismarine viewers)
-( cd concordia/server && node index.js ) &
-
-# 4. Boot the host (Vite dev + bundles pod-host into the page)
-( cd concordia/host && npm run dev ) &
-
-# 5. Open in CHROME (Safari's COEP/SharedArrayBuffer support is incomplete):
-#    http://localhost:5174/main.html
-#
-#    The page boots a BrowserPod sandbox, copies pod-host files into it,
-#    runs `npm install && node server.js` inside the pod, captures the
-#    public portal URL, draws the QR, and POSTs the relay URL to the
-#    laptop so the bridge connects.
+# Browser-side: Vite inlines VITE_* vars at dev time
+cat > concordia/host/.env <<EOF
+VITE_BP_APIKEY=bp1_...
+VITE_ANTHROPIC_API_KEY=sk-ant-...
+EOF
 ```
 
-Then either:
+> `VITE_ANTHROPIC_API_KEY` is only used by the phone control surface as a local-dev fallback when the pod's `/api/claude` proxy isn't yet wired. In a real deployment the key never leaves the pod.
 
-- Click **🚀 RUN** on the TV and give the team a goal, or
-- Scan the QR with a phone and drive one agent yourself. The other three keep coordinating around you.
+### 2. Install dependencies
+
+```bash
+( cd concordia/server   && npm install )   # flying-squid + mineflayer + prismarine-viewer
+( cd concordia/host     && npm install )   # Vite + BrowserPod client
+( cd concordia/pod-host && npm install )   # Express + ws (bundled into the pod at boot)
+```
+
+First install is slow (~3 min). `concordia/server/node_modules` alone is ~600 MB; the bulk is `prismarine-viewer`'s block textures.
+
+### 3. Boot the laptop side
+
+```bash
+( cd concordia/server && node index.js )
+```
+
+This single Node process spawns:
+
+| What | Port | Bound to |
+|---|---|---|
+| `flying-squid` MC server | `25565` | `127.0.0.1` (never exposed) |
+| Alice POV (first-person) | `3007` | `0.0.0.0` |
+| Bob POV | `3017` | `0.0.0.0` |
+| Carl POV | `3027` | `0.0.0.0` |
+| Dana POV | `3037` | `0.0.0.0` |
+| Overview (third-person orbit) | `3047` | `0.0.0.0` |
+| Command WS (bot RPC) | `3008` | `0.0.0.0` |
+| HTTP control (`/bots`, `/relay-url`, `/team-prompt`) | `3008` | `0.0.0.0` |
+
+Watch for the five `Prismarine viewer web server running on *:<port>` lines and the `[cmd] WS command server on 0.0.0.0:3008` line. If any are missing, something crashed; check stderr.
+
+### 4. Boot the host (Vite)
+
+In a second terminal:
+
+```bash
+( cd concordia/host && npm run dev )
+```
+
+Vite serves on **port 5174** with `host: "0.0.0.0"`, so three URLs work immediately:
+
+- **http://localhost:5174/main.html** on the laptop itself
+- **http://<laptop-lan-ip>:5174/main.html** from any device on the same Wi-Fi (phones, tablets, another laptop)
+- Public URL if you run `ngrok http 5174` (see *Exposing it publicly* below)
+
+The Vite config also proxies:
+
+- `/api/bots` · `/api/relay-url` · `/api/team-prompt` → `:3008` (so a single port exposes the control plane)
+- `/ws-cmd` → `ws://localhost:3008/` (so the same origin serves the WebSocket)
+
+### 5. Open the TV view
+
+In **Chrome** (any Chromium-based browser works: Edge, Arc, Brave):
+
+```
+http://localhost:5174/main.html
+```
+
+On first load the page will:
+
+1. Boot a BrowserPod sandbox in-tab (`[pod] [boot] pod ready`)
+2. Fetch a manifest of pod-host files (`[pod] [boot] manifest has 8 files`)
+3. Copy them into the pod's virtual filesystem
+4. Run `npm install` inside the pod (Express + ws, ~1 s)
+5. Run `node server.js` inside the pod
+6. Read back the pod's public portal URL (`*.browserportal.io`)
+7. Render the QR code and POST the relay URL to `:3008` so the laptop's `relayBridge.js` dials out
+
+When you see the 5 POV tiles rendering and the QR code appears, you're live.
+
+### 6. Drive the demo
+
+- **Team mode**: type a goal in the top bar (`mine more diamonds`, `build a tower together`, `find iron and share it`) and press **🚀 RUN**. The prompt fans out to all four agents in parallel.
+- **Individual mode**: scan the QR code on a phone. Pick an agent. Type commands. The other three keep coordinating with whatever your agent does.
+- **Reset**: Ctrl-C the `node index.js` process and restart it. The world is seeded with a fixed seed so the terrain is reproducible across restarts.
+
+### Exposing it publicly (optional)
+
+```bash
+ngrok http 5174
+```
+
+This exposes only the TV view + proxied control endpoints. The POV iframes reference `localhost:3007–3047` so remote viewers see black tiles; that's a cosmetic trade-off, not a functional issue. For judges on the same Wi-Fi, give them the LAN URL instead (iframes resolve against their browser's DNS, so `http://<laptop-ip>:3007` works from their phone).
+
+### Common gotchas
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Viewer iframes are black and console shows `(index):1 Failed to load resource: 404` | The `node index.js` process was started from a path that has since moved/renamed | Kill the process and restart it from the current folder. `__dirname` in prismarine-viewer is captured at module load |
+| `Safari can't open the page` or blank canvas | Safari's cross-origin-isolation is incomplete | Use Chrome, Edge, Arc, or Brave |
+| `npm install` hangs in `concordia/server` | `canvas` native build trying to compile against missing libs | We ship a stub at `server/canvas-stub/`; ensure it's symlinked or the stub resolver is active |
+| QR code is missing after page load | Pod boot failed (check console for `[pod] [err]`) or `VITE_BP_APIKEY` is unset | Verify `concordia/host/.env` has a valid key, hard-refresh the page |
+| Bots freeze mid-action | Anthropic rate limit or expired key | Check the `node index.js` stderr for `429` or `401`; rotate the key if needed |
+| Port already in use (`EADDRINUSE`) on 3007–3047, 3008, or 25565 | Previous `node index.js` still running, or another app claimed the port | `lsof -ti :25565 -ti :3008 -ti :3007 \| xargs kill -9` and restart |
+
+### One-liner for restarts during development
+
+```bash
+# from repo root
+lsof -ti :25565 -ti :3007 -ti :3017 -ti :3027 -ti :3037 -ti :3047 -ti :3008 2>/dev/null \
+  | sort -u | xargs -r kill -9; \
+  ( cd concordia/server && node index.js )
+```
 
 ---
 

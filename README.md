@@ -6,7 +6,9 @@
 
 *A framework for four Claude-driven agents to plan, negotiate, divide labour, and cooperate in a shared world, where Minecraft is the visualisation layer and the orchestration substrate underneath is the product.*
 
-![Concordia: four coordinated Claude agents mining diamonds together](docs/hero.png)
+<video src="docs/demo.mp4" controls autoplay muted loop playsinline poster="docs/hero.png" width="100%">
+  Your browser doesn't support inline video. <a href="docs/demo.mp4">Download the demo</a>.
+</video>
 
 <sub>Submitted to **AI in the Box** · University of Leeds · 2–3 May 2026 · Built solo in 24 hours.</sub>
 
